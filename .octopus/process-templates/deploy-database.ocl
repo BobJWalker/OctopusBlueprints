@@ -1,2 +1,40 @@
 name = "Deploy Database"
 description = ""
+
+step "build-delta-report" {
+    name = "Build Delta Report"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.ExecutionTimeout.Minutes = "15"
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $connectionString = $OctopusParameters["Template.Database.ConnectionString"]
+                $changeReportDirectory = $OctopusParameters["Template.Database.ChangeReportDirectory"]
+                $projectDll = $OctopusParameters["Template.DbUp.Executable"]
+                $environmentName = $OctopusParameters["Octopus.Environment.Name"]
+                $extractedPath = $OctopusParameters["Octopus.Environment.Name"]
+                
+                Write-Host "Setting the current location to $extractedPath"
+                Set-Location $extractedPath
+                $ExecutionLocation = "$extractedPath/$projectDll"
+                
+                Write-Host "Doing a what-if migration, generating a change report at $changeReportDirectory"
+                
+                if ((test-path $changeReportDirectory) -eq $false){
+                   Write-Host "The directory $changeReportDirectory does not exist, creating it now"
+                   New-Item $changeReportDirectory -ItemType "directory"
+                }
+                
+                dotnet $ExecutionLocation --ConnectionString="$connectionString" --PreviewReportPath="$changeReportDirectory"
+                
+                $generatedReport = "$changeReportDirectory/UpgradeReport.html"
+                New-OctopusArtifact -Path "$generatedReport" -Name "$environmentName.UpgradeReport.html"
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+    }
+}

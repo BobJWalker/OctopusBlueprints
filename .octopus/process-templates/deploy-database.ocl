@@ -75,6 +75,61 @@ step "build-delta-report" {
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
-        }        
+        }
+    }
+}
+
+step "notify-dbas" {
+    name = "Notify DBAs"
+
+    action {
+        action_type = "Octopus.Email"
+        is_required = true
+        properties = {
+            Octopus.Action.Email.Body = "You can view the the deployment here: #{Octopus.Web.ServerUri}/app#/#{Octopus.Space.Id}/tasks/#{Octopus.Task.Id}"
+            Octopus.Action.Email.Subject = "#{Octopus.Project.Name} #{Octopus.Release.Number} to #{Octopus.Environment.Name} has paused and is awaiting review."
+            Octopus.Action.Email.To = "hello@octopus.com"
+        }
+    }
+}
+
+step "dbas-approve" {
+    name = "DBAs approve"
+    start_trigger = "StartWithPrevious"
+
+    action {
+        action_type = "Octopus.Manual"
+        properties = {
+            Octopus.Action.Manual.BlockConcurrentDeployments = "False"
+            Octopus.Action.Manual.Instructions = "Please review and verify the migration database report matches your expectations."
+            Octopus.Action.Manual.ResponsibleTeamIds = "global/octopus-managers"
+        }
+    }
+}
+
+step "deploy-database-changes" {
+    name = "Deploy Database Changes"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.ExecutionTimeout.Minutes = "30"
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $connectionString = $OctopusParameters["Template.Database.ConnectionString"]
+                $projectDll = $OctopusParameters["Template.DbUp.Executable"]
+                $environmentName = $OctopusParameters["Octopus.Environment.Name"]
+                $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.Database.Package].ExtractedPath"]
+                
+                Write-Host "Setting the current location to $extractedPath"
+                Set-Location $extractedPath
+                $ExecutionLocation = "$extractedPath/$projectDll"
+                
+                dotnet $ExecutionLocation --ConnectionString="$connectionString"
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
     }
 }

@@ -1,6 +1,11 @@
 name = "Deploy Database"
 description = ""
 
+icon {
+    color = "#3CA4F3"
+    id = "database"
+}
+
 parameter "Template.Database.Package" {
     display_settings = {
         Octopus.ControlType = "Package"
@@ -76,6 +81,16 @@ step "build-delta-report" {
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
         }
+
+        packages "Template.Database.Package" {
+            acquisition_location = "Server"
+            properties = {
+                Extract = "True"
+                PackageParameterName = "Template.Database.Package"
+                Purpose = ""
+                SelectionMode = "deferred"
+            }
+        }
     }
 }
 
@@ -130,6 +145,16 @@ step "deploy-database-changes" {
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
+        }
+
+        packages "Template.Database.Package" {
+            acquisition_location = "Server"
+            properties = {
+                Extract = "True"
+                PackageParameterName = "Template.Database.Package"
+                Purpose = ""
+                SelectionMode = "deferred"
+            }
         }
     }
 }

@@ -1,6 +1,11 @@
 name = "Deploy Database"
 description = "Process template that will deploy a database using DBUp"
 
+icon {
+    color = "#173B56"
+    id = "database"
+}
+
 parameter "Template.Database.Package" {
     display_settings = {
         Octopus.ControlType = "Package"
@@ -52,16 +57,12 @@ parameter "Template.Skip.OptionalSteps" {
 }
 
 step "build-delta-report" {
-    condition = "Variable"
     name = "Build Delta Report"
-    properties = {
-        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Template.Skip.OptionalSteps}#{/unless}"
-    }
 
     action {
         action_type = "Octopus.Script"
         notes = <<-EOT
-                **Optional**
+                **Required**
                 
                 Builds a report containing all the scripts that haven't run on the target database.
                 EOT

@@ -80,17 +80,7 @@ step "build-delta-report" {
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
-        }
-
-        packages "Template.Database.Package" {
-            acquisition_location = "Server"
-            properties = {
-                Extract = "True"
-                PackageParameterName = "Template.Database.Package"
-                Purpose = ""
-                SelectionMode = "deferred"
-            }
-        }
+        }        
     }
 }
 
@@ -145,16 +135,6 @@ step "deploy-database-changes" {
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
-        }
-
-        packages "Template.Database.Package" {
-            acquisition_location = "Server"
-            properties = {
-                Extract = "True"
-                PackageParameterName = "Template.Database.Package"
-                Purpose = ""
-                SelectionMode = "deferred"
-            }
-        }
+        }        
     }
 }

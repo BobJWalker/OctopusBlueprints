@@ -48,6 +48,11 @@ step "build-delta-report" {
 
     action {
         action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Optional**
+                
+                Builds a report containing all the scripts that haven't run on the target database.
+                EOT
         properties = {
             Octopus.Action.ExecutionTimeout.Minutes = "15"
             Octopus.Action.RunOnServer = "true"
@@ -98,6 +103,11 @@ step "notify-dbas" {
 
     action {
         action_type = "Octopus.Email"
+        notes = <<-EOT
+                **Optional**
+                
+                Sends out an email notifying DBAs there is a pending change for them to review.
+                EOT
         properties = {
             Octopus.Action.Email.Body = "You can view the the deployment here: #{Octopus.Web.ServerUri}/app#/#{Octopus.Space.Id}/tasks/#{Octopus.Task.Id}"
             Octopus.Action.Email.Subject = "#{Octopus.Project.Name} #{Octopus.Release.Number} to #{Octopus.Environment.Name} has paused and is awaiting review."
@@ -112,10 +122,57 @@ step "dbas-approve-delta-script" {
 
     action {
         action_type = "Octopus.Manual"
+        notes = <<-EOT
+                **Optional**
+                
+                Pauses the deployment to allow DBAs to review the delta script for any potential destructive actions on the database.
+                EOT
         properties = {
             Octopus.Action.Manual.BlockConcurrentDeployments = "True"
             Octopus.Action.Manual.Instructions = "Please review and verify the migration database report matches your expectations."
             Octopus.Action.Manual.ResponsibleTeamIds = "global/everyone"
+        }
+    }
+}
+
+step "deploy-database-changes" {
+    name = "Deploy Database Changes"
+
+    action {
+        action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Required**
+                
+                Deploys the database changes by running the scripts found in the package.
+                EOT
+        properties = {
+            Octopus.Action.ExecutionTimeout.Minutes = "30"
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $connectionString = $OctopusParameters["Template.Database.ConnectionString"]
+                $projectDll = $OctopusParameters["Template.DbUp.Executable"]
+                $environmentName = $OctopusParameters["Octopus.Environment.Name"]
+                $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.Database.Package].ExtractedPath"]
+                                
+                Write-Host "Setting the current location to $extractedPath"
+                Set-Location $extractedPath
+                $ExecutionLocation = "$extractedPath/$projectDll"
+                                
+                dotnet $ExecutionLocation --ConnectionString="$connectionString"
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+
+        packages "Template.Database.Package" {
+            acquisition_location = "Server"
+            properties = {
+                Extract = "True"
+                PackageParameterName = "Template.Database.Package"
+                Purpose = ""
+                SelectionMode = "deferred"
+            }
         }
     }
 }

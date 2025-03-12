@@ -1,0 +1,2 @@
+name = "Deploy Database"
+description = "Process template that will deploy a database using DBUp"

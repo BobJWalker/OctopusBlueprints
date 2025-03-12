@@ -1,2 +1,36 @@
 name = "Deploy Database"
 description = "Process template that will deploy a database using DBUp"
+
+parameter "Template.Database.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "**Required:** The package containing all the DBUp executable and scripts to run."
+    label = "Database Package"
+}
+
+parameter "Template.DbUp.Executable" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "**Required:** The executable of your dotnet console application to run.  Example: `Trident.Database.DbUp.dll`"
+    label = "DBUp Executable"
+}
+
+parameter "Template.Database.ConnectionString" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "**Required:** The connection string of the database to modify."
+    label = "Database Connection String"
+}
+
+parameter "Template.Database.ChangeReportDirectory" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "**Required:** The directory where the delta report will be stored after creation."
+    label = "Delta Report Directory"
+
+    value "../../#{Octopus.Project.Name}/#{Octopus.Release.Number}/#{Octopus.Environment.Name}" {}
+}

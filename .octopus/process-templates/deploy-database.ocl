@@ -43,8 +43,20 @@ parameter "Template.Notification.Email" {
     label = "Notification Email Addresses"
 }
 
+parameter "Template.Skip.OptionalSteps" {
+    display_settings = {
+        Octopus.ControlType = "Checkbox"
+    }
+    help_text = "**Required: ** Checking the checkbox (or setting it to true) will skip the optional steps in the process.  "
+    label = "Skip Optional Steps"
+}
+
 step "build-delta-report" {
+    condition = "Variable"
     name = "Build Delta Report"
+    properties = {
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Template.Skip.OptionalSteps}#{/unless}"
+    }
 
     action {
         action_type = "Octopus.Script"
@@ -99,7 +111,11 @@ step "build-delta-report" {
 }
 
 step "notify-dbas" {
+    condition = "Variable"
     name = "Notify DBAs"
+    properties = {
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Template.Skip.OptionalSteps}#{/unless}"
+    }
 
     action {
         action_type = "Octopus.Email"
@@ -117,7 +133,11 @@ step "notify-dbas" {
 }
 
 step "dbas-approve-delta-script" {
+    condition = "Variable"
     name = "DBAs Approve Delta Script"
+    properties = {
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Template.Skip.OptionalSteps}#{/unless}"
+    }
     start_trigger = "StartWithPrevious"
 
     action {
@@ -167,6 +187,8 @@ step "deploy-database-changes" {
 
         packages "Template.Database.Package" {
             acquisition_location = "Server"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 Extract = "True"
                 PackageParameterName = "Template.Database.Package"

@@ -53,6 +53,11 @@ step "calculate-deployment-mode" {
 
     action {
         action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Step to determine if this run is a deployment, rollback, or re-deployment.
+                EOT
         properties = {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT

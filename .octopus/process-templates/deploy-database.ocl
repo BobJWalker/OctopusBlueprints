@@ -274,7 +274,7 @@ step "build-delta-report" {
     condition = "Variable"
     name = "Build Delta Report"
     properties = {
-        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Calculate Deployment Mode].Output.RunOnDeploy}#{/unless}"
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Calculate Deployment Mode].Output.RunOnDeploy}#{/unless}"
     }
 
     action {
@@ -333,7 +333,7 @@ step "notify-dbas" {
     condition = "Variable"
     name = "Notify DBAs"
     properties = {
-        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Calculate Deployment Mode].Output.RunOnDeploy}#{/unless}"
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Calculate Deployment Mode].Output.RunOnDeploy}#{/unless}"
     }
 
     action {
@@ -356,7 +356,7 @@ step "dbas-approve-delta-script" {
     condition = "Variable"
     name = "DBAs Approve Delta Script"
     properties = {
-        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Calculate Deployment Mode].Output.RunOnDeploy}#{/unless}"
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Calculate Deployment Mode].Output.RunOnDeploy}#{/unless}"
     }
     start_trigger = "StartWithPrevious"
 
@@ -379,7 +379,7 @@ step "deploy-database-changes" {
     condition = "Variable"
     name = "Deploy Database Changes"
     properties = {
-        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Calculate Deployment Mode].Output.RunOnDeploy}#{/unless}"
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Calculate Deployment Mode].Output.RunOnDeploy}#{/unless}"
     }
 
     action {

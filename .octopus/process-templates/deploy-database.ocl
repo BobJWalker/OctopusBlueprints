@@ -345,7 +345,7 @@ step "notify-dbas" {
                 Sends out an email notifying DBAs there is a pending change for them to review.
                 EOT
         properties = {
-            Octopus.Action.Email.Body = "You can view the the deployment here: #{Octopus.Web.ServerUri}/app#/#{Octopus.Space.Id}/tasks/#{Octopus.Task.Id}.  Test"
+            Octopus.Action.Email.Body = "You can view the the deployment here: #{Octopus.Web.ServerUri}/app#/#{Octopus.Space.Id}/tasks/#{Octopus.Task.Id}."
             Octopus.Action.Email.Subject = "#{Octopus.Project.Name} #{Octopus.Release.Number} to #{Octopus.Environment.Name} has paused and is awaiting review."
             Octopus.Action.Email.To = "#{Template.Notification.Email}"
         }

@@ -306,8 +306,9 @@ step "build-delta-report" {
                   New-Item $changeReportDirectory -ItemType "directory"
                 }
                 
-                $DbUpExecutable = "./$($projectExe)"
-                $DbUpExecutable --ConnectionString="$connectionString" --PreviewReportPath="$changeReportDirectory"
+                chmod +x "./$extractedPath/$projectExe"
+                
+                & $projectExe --ConnectionString="$connectionString" --PreviewReportPath="$changeReportDirectory"
                                 
                 $generatedReport = "$changeReportDirectory/UpgradeReport.html"
                 New-OctopusArtifact -Path "$generatedReport" -Name "$environmentName.UpgradeReport.html"
@@ -402,7 +403,9 @@ step "deploy-database-changes" {
                                 
                 Write-Host "Setting the current location to $extractedPath"
                 Set-Location $extractedPath
-                                
+                
+                chmod +x "./$extractedPath/$projectExe"
+                
                 & $projectExe --ConnectionString="$connectionString"
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"

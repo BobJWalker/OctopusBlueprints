@@ -404,9 +404,9 @@ step "deploy-database-changes" {
                 Write-Host "Setting the current location to $extractedPath"
                 Set-Location $extractedPath
                 
-                chmod +x "./$extractedPath/$projectExe"
+                chmod +x "./$projectExe"
                 
-                & $projectExe --ConnectionString="$connectionString"
+                & "./$projectExe" --ConnectionString="$connectionString"
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"

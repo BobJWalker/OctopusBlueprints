@@ -306,7 +306,7 @@ step "build-delta-report" {
                   New-Item $changeReportDirectory -ItemType "directory"
                 }
                                 
-                & $projectExe --ConnectionString="$connectionString" --PreviewReportPath="$changeReportDirectory"
+                ./$projectExe --ConnectionString="$connectionString" --PreviewReportPath="$changeReportDirectory"
                                 
                 $generatedReport = "$changeReportDirectory/UpgradeReport.html"
                 New-OctopusArtifact -Path "$generatedReport" -Name "$environmentName.UpgradeReport.html"

@@ -1,4 +1,4 @@
-name = "Deploy Database"
+name = "Deploy Process - Deploy Database"
 description = "Process template that will deploy a database using DBUp"
 
 icon {

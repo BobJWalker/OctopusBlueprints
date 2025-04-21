@@ -1,0 +1,364 @@
+name = "Runbook - Run Adhoc Data Update Script"
+description = "Process template that will allow you to run a adhoc database script to update a row in the database to fix \"data funk\""
+
+icon {
+    color = "#FFB867"
+    id = "database"
+}
+
+parameter "Template.ScriptToRun.Text" {
+    display_settings = {
+        Octopus.ControlType = "MultiLineText"
+    }
+    help_text = "The script that you wish to run that updates a single row"
+    label = "Script to run"
+}
+
+parameter "Template.SQLServer.Name" {
+    display_settings = {
+        Octopus.ControlType = "Sensitive"
+    }
+    help_text = "The URL or IP Address of the SQL Server to perform the work on"
+    label = "SQL Server Name"
+}
+
+parameter "Template.SQLServer.User.Name" {
+    display_settings = {
+        Octopus.ControlType = "Sensitive"
+    }
+    help_text = <<-EOT
+            
+            The login of the user who has permissions to run the adhoc script on the database.
+            
+            Leave blank for integrated security
+            EOT
+    label = "SQL Server Username"
+}
+
+parameter "Template.SQLServer.User.Password" {
+    display_settings = {
+        Octopus.ControlType = "Sensitive"
+    }
+    help_text = <<-EOT
+            The password of the user who has permissions to run the adhoc script on the database
+            
+            Leave blank for integrated security
+            EOT
+    label = "SQL Password"
+}
+
+parameter "Template.SQLServer.Database.Name" {
+    display_settings = {
+        Octopus.ControlType = "Sensitive"
+    }
+    help_text = "The name of the database to to run the script on"
+    label = "Database to Delete"
+}
+
+step "send-email-confirmation-to-requester" {
+    name = "Send email confirmation to requester"
+
+    action {
+        action_type = "Octopus.Email"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Sends an email confirmation to the requester
+                EOT
+        properties = {
+            Octopus.Action.Email.Body = <<-EOT
+                Thank you for submitting a request to update #{Project.Database.Name} in #{Octopus.Environment.Name}.  The script you submitted was:
+                
+                #{Template.ScriptToRun.Text}
+                
+                This process will attempt to auto-approve the script.  This process will automatically notify you of any changes.
+                EOT
+            Octopus.Action.Email.Subject = "AdHoc Data Change Script for #{Project.Database.Name} in #{Octopus.Environment.Name} has been submitted"
+            Octopus.Action.Email.To = "#{Octopus.Deployment.CreatedBy.EmailAddress}"
+        }
+        worker_pool_variable = ""
+    }
+}
+
+step "check-script-for-auto-approval" {
+    name = "Check Script For Auto Approval"
+
+    action {
+        action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Checks the script for commands with forbidden keywords and ensures the update doesn't update more than 1 row.
+                EOT
+        properties = {
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $scriptToRun = $OctopusParameters["Template.ScriptToRun.Text"]
+                $commandsToLookFor = "Create Table,Alter Table,Drop Table,Drop View,Create View,Create Function,Drop Function,sp_addrolemember,sp_droprolemember,alter role,Merge,Create Schema"
+                $databaseName = $OctopusParameters["Template.SQLServer.Database.Name"]
+                $databaseServer = $OctopusParameters["Template.SQLServer.Name"]
+                $userName = $OctopusParameters["Template.SQLServer.User.Name"]
+                $userPassword = $OctopusParameters["Template.SQLServer.User.Password"]
+                $environmentName = $OctopusParameters["Octopus.Environment.Name"]
+                
+                Write-Highlight "The script to run is:"
+                Write-Highlight "$scriptToRun"
+                
+                if ([string]::IsNullOrWhiteSpace($userName) -eq $true){
+                	Write-Host "No username found, using integrated security"
+                    $connectionString = "Server=$databaseServer;Database=$databaseName;integrated security=true;"
+                }
+                else {
+                	Write-Host "Username found, using SQL Authentication"
+                    $connectionString = "Server=$databaseServer;Database=$databaseName;User ID=$userName;Password=$userPassword;"
+                }
+                
+                $approvalRequired = $false
+                $messages = ""
+                
+                Write-Highlight "Looping through the script to look for schema change commands"
+                $commandsToCheck = $CommandsToLookFor -split ","
+                foreach ($command in $commandsToCheck)
+                {
+                	Write-Host "Checking for command $command"
+                    $foundCommand = $scriptToRun -match "$command"
+                
+                    if ($foundCommand)
+                    {
+                    	$warningMessage = "A '$command' SQL Statement was found, approval by DBA is required."
+                        $messages += $warningMessage + "`r`n"
+                        Write-Highlight $warningMessage
+                        $approvalRequired = $true        
+                    }
+                }
+                
+                Write-Highlight "Attempting test run of script in a transaction"
+                $sqlConnection = New-Object System.Data.SqlClient.SqlConnection
+                $sqlConnection.ConnectionString = $connectionString
+                
+                $command = $sqlConnection.CreateCommand()
+                $command.CommandType = [System.Data.CommandType]'Text'
+                $command.CommandText = $scriptToRun
+                
+                Write-Host "Opening the connection to $databaseName"
+                
+                $sqlConnection.Open()   
+                
+                try
+                {
+                	Write-Host "Creating transaction"
+                	$command.Transaction = $sqlConnection.BeginTransaction()
+                    
+                    Write-Host "Running query now"
+                	$rowsChanged = $command.ExecuteNonQuery()
+                }
+                catch
+                {
+                	throw $_
+                }
+                finally 
+                {
+                	$command.Transaction.Rollback()
+                }
+                
+                if ($rowsChanged -gt 10)
+                {
+                	$warningMessage = "The number of rows which will changed is $rowsChanged, approval by DBA is required."
+                    $messages += $warningMessage + "`r`n"
+                    Write-Highlight $warningMessage
+                    
+                    $approvalRequired = $true
+                }
+                
+                if ($approvalRequired -eq $false)
+                {
+                	Write-Highlight "Script passes requirements, auto approving" 
+                    $messageSubject = "No intervention required for script to be run on $databaseName in $environmentName"
+                    $messageBody = "Script contained no schema change commands and will update between 1 and 10 rows of data"
+                }
+                else 
+                {
+                	$messageSubject = "DBA intervention required for script to be run on $databaseName in $environmentName"
+                    $messageBody = $messages
+                }
+                
+                Set-OctopusVariable -name "ApprovalRequired" -value $approvalRequired
+                Set-OctopusVariable -name "MessageSubject" -value $messageSubject
+                Set-OctopusVariable -name "MessageBody" -value $messageBody
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = ""
+    }
+}
+
+step "notify-requester-of-approval-status" {
+    name = "Notify Requester of Approval Status"
+
+    action {
+        action_type = "Octopus.Email"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Will send out a notification to the requester informing them of the auto-approval status.
+                EOT
+        properties = {
+            Octopus.Action.Email.Body = "#{Octopus.Action[Check Script For Auto Approval].Output.MessageBody}"
+            Octopus.Action.Email.Subject = "#{Octopus.Action[Check Script For Auto Approval].Output.MessageSubject}"
+            Octopus.Action.Email.To = "#{Octopus.Deployment.CreatedBy.EmailAddress}"
+        }
+        worker_pool_variable = ""
+    }
+}
+
+step "notify-dbas-of-pending-changes" {
+    condition = "Variable"
+    name = "Notify DBAs of Pending Changes"
+    properties = {
+        Octopus.Step.ConditionVariableExpression = "#{Octopus.Action[Check Script For Auto Approval].Output.ApprovalRequired}"
+    }
+    start_trigger = "StartWithPrevious"
+
+    action {
+        action_type = "Octopus.Email"
+        notes = <<-EOT
+                **Only Runs When Auto Approval Fails**
+                
+                Sends a notification to the DBAs that they need to review the script before approving it.
+                EOT
+        properties = {
+            Octopus.Action.Email.Body = <<-EOT
+                The following script failed validation.  Please review and approve it.
+                
+                #{Template.ScriptToRun.Text}
+                
+                Click here to approve or reject: #{Octopus.Web.ServerUri}/app#/#{Octopus.Space.Id}/tasks/#{Octopus.Task.Id}
+                EOT
+            Octopus.Action.Email.Subject = "Data Update Script Requires Approval"
+            Octopus.Action.Email.To = "dbas@octopus.com"
+        }
+        worker_pool_variable = ""
+    }
+}
+
+step "manual-intervention-required" {
+    condition = "Variable"
+    name = "DBA Approve Script"
+    properties = {
+        Octopus.Step.ConditionVariableExpression = "#{Octopus.Action[Check Script For Auto Approval].Output.ApprovalRequired}"
+    }
+
+    action {
+        action_type = "Octopus.Manual"
+        notes = <<-EOT
+                **Only Runs When Auto Approval Fails**
+                
+                Pauses the deployment and requires a DBA to approve the script before proceeding.
+                EOT
+        properties = {
+            Octopus.Action.Manual.BlockConcurrentDeployments = "False"
+            Octopus.Action.Manual.Instructions = <<-EOT
+                Please approve the following script to be run on the database #{Template.SQLServer.Database.Name} in #{Octopus.Environment.Name}
+                
+                #{Project.ScriptToRun.Text}
+                EOT
+        }
+        worker_pool_variable = ""
+    }
+}
+
+step "run-adhoc-script" {
+    name = "Run AdHoc Script"
+
+    action {
+        action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Runs the script that the requester submitted.
+                EOT
+        properties = {
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $scriptToRun = $OctopusParameters["Template.ScriptToRun.Text"]
+                $databaseName = $OctopusParameters["Template.SQLServer.Database.Name"]
+                $databaseServer = $OctopusParameters["Template.SQLServer.Name"]
+                $userName = $OctopusParameters["Template.SQLServer.User.Name"]
+                $userPassword = $OctopusParameters["Template.SQLServer.User.Password"]
+                
+                Write-Host "Database Server: $databaseServer"
+                Write-Host "Database Name: $databaseName"
+                
+                if ([string]::IsNullOrWhiteSpace($userName) -eq $true){
+                	Write-Host "No username found, using integrated security"
+                    $connectionString = "Server=$databaseServer;Database=$databaseName;integrated security=true;"
+                }
+                else {
+                	Write-Host "Username found, using SQL Authentication"
+                    $connectionString = "Server=$databaseServer;Database=$databaseName;User ID=$userName;Password=$userPassword;"
+                }
+                
+                $sqlConnection = New-Object System.Data.SqlClient.SqlConnection
+                $sqlConnection.ConnectionString = $connectionString
+                
+                $command = $sqlConnection.CreateCommand()
+                $command.CommandType = [System.Data.CommandType]'Text'
+                $command.CommandText = $scriptToRun
+                
+                Write-Host "Opening the connection to $databaseName on $databaseServer"
+                
+                $sqlConnection.Open()   
+                
+                try
+                {
+                	Write-Highlight "Creating transaction"
+                	$command.Transaction = $sqlConnection.BeginTransaction()
+                    
+                    Write-Highlight "Running query now"
+                	$rowsChanged = $command.ExecuteNonQuery()
+                    
+                    Write-Highlight "Committing Transaction"
+                    $command.Transaction.Commit()
+                }
+                catch
+                {
+                	Write-Highlight "Exception with running script, rolling back transaction"
+                	$command.Transaction.Rollback()
+                	throw $_
+                }
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = ""
+    }
+}
+
+step "notify-dbas-and-requester" {
+    condition = "Always"
+    name = "Notify DBAs and Requester"
+
+    action {
+        action_type = "Octopus.Email"
+        notes = <<-EOT
+                **Always Runs (even after failures)**
+                
+                Sends out a notification to the requester and DBAs letting them know the status of the script run.
+                EOT
+        properties = {
+            Octopus.Action.Email.Body = <<-EOT
+                The request to update #{Template.SQLServer.Database.Name} in #{Octopus.Environment.Name}.  That following script has finished running.  The script you submitted was:
+                
+                #{Project.ScriptToRun.Text}
+                
+                The status was: #{Octopus.Step.Status.Error}
+                EOT
+            Octopus.Action.Email.Subject = "AdHoc Data Change Script for #{Project.Database.Name} in #{Octopus.Environment.Name} has finished running"
+            Octopus.Action.Email.To = "#{Octopus.Deployment.CreatedBy.EmailAddress}; dbas@octopus.com"
+        }
+        worker_pool_variable = ""
+    }
+}

@@ -12,6 +12,8 @@ parameter "Template.Azure.Account" {
     }
     help_text = "The Azure Account that will be used to create the resource group, app service plan, and staging slot."
     label = "Azure Account"
+
+    value "azure-oidc" {}
 }
 
 parameter "Template.Azure.ResourceGroup.Name" {

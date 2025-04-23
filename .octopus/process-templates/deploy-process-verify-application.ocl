@@ -18,8 +18,8 @@ parameter "Template.Sha.FileName" {
     display_settings = {
         Octopus.ControlType = "SingleLineText"
     }
-    help_text = "The name of the yaml file in the SBOM package containing all the hashes to verify."
-    label = "File containing SHA hashes"
+    help_text = "The name of the JSON file in the SBOM package containing all the hashes to verify."
+    label = "File containing hashes"
 }
 
 parameter "Template.Docker.Containers" {

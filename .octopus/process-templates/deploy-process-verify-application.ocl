@@ -194,8 +194,6 @@ step "verify-package" {
         properties = {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                import powershell-yaml
-                
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Package].ExtractedPath"]
                 $fileName = $OctopusParameters["Template.Sha.FileName"]
                 $packageToVerify = $OctopusParameters["Octopus.Action.Package[Template.Verify.Package].PackageFilePath"]

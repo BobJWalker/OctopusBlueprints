@@ -128,9 +128,9 @@ step "verify-docker-containers" {
                 
                   $foundSha = $false
                   # Loop through all the keys
-                  foreach ($key in $jsonContent.PSObject.Properties.Name) 
+                  foreach ($key in $convertedFile.PSObject.Properties.Name) 
                   {
-                    $item = $jsonContent.$key
+                    $item = $convertedFile.$key
                 
                      $item = $convertedFile[$key]
                      Write-Host "The hash to compare is $item"
@@ -207,9 +207,9 @@ step "verify-package" {
                 
                 Write-Host "The hash of the package to verify is $hashOfObject"
                 $foundSha = $false
-                foreach ($key in $jsonContent.PSObject.Properties.Name) 
+                foreach ($key in $convertedFile.PSObject.Properties.Name) 
                 {
-                  $item = $jsonContent.$key
+                  $item = $convertedFile.$key
                   Write-Host "The hash to compare is $item"
                 
                   if ($item -eq $hashOfObject)

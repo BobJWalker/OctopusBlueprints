@@ -1,4 +1,4 @@
-name = "Deploy Process - Verify Application"
+name = "Deploy Process - Verify Build Artifacts"
 description = "A process template that attaches an SBOM to a deployment and compares the SHA256 hashes of containers and a package."
 
 icon {
@@ -83,6 +83,8 @@ step "attach-sbom-to-release" {
 
         packages "Template.SBOM.Package" {
             acquisition_location = "Server"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 Extract = "True"
                 PackageParameterName = "Template.SBOM.Package"
@@ -110,7 +112,7 @@ step "verify-docker-containers" {
                 $fileName = $OctopusParameters["Template.Sha.FileName"]
                 $objectToGetHash = $OctopusParameters["Template.Docker.Containers"]
                 
-                $fileText = Get-Content -path "$($extractedPath)/$($fileContainingSha)"
+                $fileText = Get-Content -path "$($extractedPath)/$($fileName)"
                 $convertedFile = $fileText | ConvertFrom-YAML
                 
                 $objectArray = $objectToGetHash.Split("`n")
@@ -161,6 +163,8 @@ step "verify-docker-containers" {
 
         packages "Template.SBOM.Package" {
             acquisition_location = "Server"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 Extract = "True"
                 PackageParameterName = "Template.SBOM.Package"
@@ -191,6 +195,9 @@ step "verify-package" {
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Package].ExtractedPath"]
                 $fileName = $OctopusParameters["Template.Sha.FileName"]
                 $packageToVerify = $OctopusParameters["Octopus.Action.Package[Template.Verify.Package].PackageFilePath"]
+                
+                $fileText = Get-Content -path "$($extractedPath)/$($fileName)"
+                $convertedFile = $fileText | ConvertFrom-YAML
                 
                 Write-Host "Getting the hash from the file $packageToVerify"
                 $rawHash = Get-FileHash -Path $packageToVerify -Algorithm SHA256
@@ -233,6 +240,8 @@ step "verify-package" {
 
         packages "Template.SBOM.Package" {
             acquisition_location = "Server"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 Extract = "True"
                 PackageParameterName = "Template.SBOM.Package"
@@ -243,6 +252,8 @@ step "verify-package" {
 
         packages "Template.Verify.Package" {
             acquisition_location = "Server"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 Extract = "False"
                 PackageParameterName = "Template.Verify.Package"

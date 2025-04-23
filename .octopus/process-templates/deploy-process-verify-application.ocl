@@ -108,14 +108,11 @@ step "verify-docker-containers" {
         properties = {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                import powershell-yaml
-                
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Package].ExtractedPath"]
                 $fileName = $OctopusParameters["Template.Sha.FileName"]
                 $objectToGetHash = $OctopusParameters["Template.Docker.Containers"]
                 
-                $fileText = Get-Content -path "$($extractedPath)/$($fileName)"
-                $convertedFile = $fileText | ConvertFrom-YAML
+                $convertedFile = Get-Content -path "$($extractedPath)/$($fileName)" -raw | ConvertFrom-Json
                 
                 $objectArray = $objectToGetHash.Split("`n")
                 foreach($dockerImage in $objectArray)
@@ -129,8 +126,11 @@ step "verify-docker-containers" {
                   Write-Host "The docker hash is $hashOfObject"
                 
                   $foundSha = $false
-                  foreach ($key in $convertedFile.Keys)
+                  # Loop through all the keys
+                  foreach ($key in $jsonContent.PSObject.Properties.Name) 
                   {
+                    $item = $jsonContent.$key
+                
                      $item = $convertedFile[$key]
                      Write-Host "The hash to compare is $item"
                 
@@ -200,8 +200,7 @@ step "verify-package" {
                 $fileName = $OctopusParameters["Template.Sha.FileName"]
                 $packageToVerify = $OctopusParameters["Octopus.Action.Package[Template.Verify.Package].PackageFilePath"]
                 
-                $fileText = Get-Content -path "$($extractedPath)/$($fileName)"
-                $convertedFile = $fileText | ConvertFrom-YAML
+                $convertedFile = Get-Content -path "$($extractedPath)/$($fileName)" -raw | ConvertFrom-Json
                 
                 Write-Host "Getting the hash from the file $packageToVerify"
                 $rawHash = Get-FileHash -Path $packageToVerify -Algorithm SHA256
@@ -209,9 +208,9 @@ step "verify-package" {
                 
                 Write-Host "The hash of the package to verify is $hashOfObject"
                 $foundSha = $false
-                foreach ($key in $convertedFile.Keys)
+                foreach ($key in $jsonContent.PSObject.Properties.Name) 
                 {
-                  $item = $convertedFile[$key]
+                  $item = $jsonContent.$key
                   Write-Host "The hash to compare is $item"
                 
                   if ($item -eq $hashOfObject)

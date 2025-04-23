@@ -1,0 +1,2 @@
+name = "Deploy Process - Verify Application"
+description = "A process template that attaches an SBOM to a deployment and compares the SHA256 hashes of containers and a package."

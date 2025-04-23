@@ -117,12 +117,11 @@ step "verify-docker-containers" {
                 $objectArray = $objectToGetHash.Split("`n")
                 foreach($dockerImage in $objectArray)
                 {
-                  $imageToPull = $dockerImage.Trim()
-                  Write-Host "Pulling the docker image $imageToPull"
-                  & docker pull $imageToPull
-                
-                  Write-Host "Getting the hash from the docker image $imageToPull"        
-                  $hashOfObject = & docker images --no-trunc --quiet $imageToPull
+                  $imageToPull = $dockerImage.Trim().Split(':')
+                  $workerToolsTags = Invoke-RestMethod "https://registry.hub.docker.com/v2/repositories/$($imageToPull[0])/tags?name=$($imageToPull[1])"
+                  $matchingTag = $workerToolsTags.results | Where-Object { $_.name -eq $imageToPull[1] }
+                  
+                  $hashOfObject = $matchingTag.digest
                   Write-Host "The docker hash is $hashOfObject"
                 
                   $foundSha = $false
@@ -151,7 +150,7 @@ step "verify-docker-containers" {
                   }
                   else 
                   {
-                    Write-Host "The hash of $imageToPull was not found, stopping the deployment"
+                    Write-Error "The hash of $imageToPull was not found, stopping the deployment."
                   }
                 }
                 
@@ -230,8 +229,6 @@ step "verify-package" {
                 {
                   Write-Error "The hash of $imageToPull was not found, stopping the deployment"
                 }
-                
-                
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"

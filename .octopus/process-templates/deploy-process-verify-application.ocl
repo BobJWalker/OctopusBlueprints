@@ -104,10 +104,10 @@ step "verify-docker-containers" {
                 $convertedFile = Get-Content -path "$($extractedPath)/$($fileName)" -raw | ConvertFrom-Json
                 
                 $objectArray = $objectToGetHash.Split("`n")
-                foreach($dockerImage in $objectArray)
+                foreach($packageItem in $objectArray)
                 {  
-                  $artifactToCompare = $dockerImage.Trim().Split(':')
-                  if ($imageToPull[0].Contains("/"))
+                  $artifactToCompare = $packageItem.Trim().Split(':')
+                  if ($artifactToCompare[0].Contains("/"))
                   {
                     Write-Host "$artifactToCompare is a docker container, pulling the manifest information from DockerHub."
                     Write-Host "Invoking https://registry.hub.docker.com/v2/repositories/$($artifactToCompare[0])/tags?name=$($artifactToCompare[1])"

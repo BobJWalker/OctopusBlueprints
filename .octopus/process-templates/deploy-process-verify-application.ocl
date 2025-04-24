@@ -212,22 +212,22 @@ step "verify-package" {
                 
                   if ($item -eq $hashOfObject)
                   {
-                    Write-Highlight "$imageToPull hash $hashOfObject matches the original build hash."
+                    Write-Highlight "$packageToVerify hash $hashOfObject matches the original build hash."
                     $foundSha = $true
                   }
                   else 
                   {
-                    Write-Host "The hash $item does not match the hash of the object $imageToPull"
+                    Write-Host "The hash $item does not match the hash of the object $packageToVerify"
                   }
                 }
                 
                 if ($foundSha -eq $true)
                 {
-                  Write-Host "The hash of $imageToPull was found in the file $fileContainingSha"
+                  Write-Host "The hash of $packageToVerify was found in the file $fileContainingSha"
                 }
                 else 
                 {
-                  Write-Error "The hash of $imageToPull was not found, stopping the deployment"
+                  Write-Error "The hash of $packageToVerify was not found, stopping the deployment"
                 }
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"

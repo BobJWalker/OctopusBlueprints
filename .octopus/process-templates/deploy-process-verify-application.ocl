@@ -135,7 +135,7 @@ step "verify-docker-containers" {
                 
                      if ($item -eq $hashOfObject)
                      {
-                       Write-Host "The hash $item matches the hash $hashOfObject of the object $imageToPull"
+                       Write-Highlight "$imageToPull hash $hashOfObject matches the original build hash."
                        $foundSha = $true
                      }
                      else 
@@ -212,7 +212,7 @@ step "verify-package" {
                 
                   if ($item -eq $hashOfObject)
                   {
-                    Write-Host "The hash $item matches the hash $hashOfObject of the object $imageToPull"
+                    Write-Highlight "$imageToPull hash $hashOfObject matches the original build hash."
                     $foundSha = $true
                   }
                   else 

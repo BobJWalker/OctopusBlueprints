@@ -6,15 +6,7 @@ icon {
     id = "box-fragile"
 }
 
-parameter "Template.Sha.FileName" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = "The name of the JSON file in the SBOM package containing all the hashes to verify."
-    label = "File containing hashes"
-}
-
-parameter "Template.Docker.Containers" {
+parameter "Template.Artifacts" {
     display_settings = {
         Octopus.ControlType = "MultiLineText"
     }
@@ -45,6 +37,14 @@ parameter "Template.Git.Release.Number" {
     label = "GitHub Release Number"
 }
 
+parameter "Template.Sha.FileName" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The name of the JSON file in the SBOM package containing all the hashes to verify."
+    label = "File containing hashes"
+}
+
 step "attach-sbom-to-release" {
     name = "Attach SBOM to Release"
 
@@ -58,25 +58,42 @@ step "attach-sbom-to-release" {
         properties = {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Package].ExtractedPath"]
-                $releaseNumber = $OctopusParameters["Octopus.Release.Number"]
+                $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
+                $gitHubReleaseNumber = $OctopusParameters["Template.Git.Release.Number"]
+                $gitHubRepoName = $OctopusParameters["Template.Git.Repo"]
                 
-                # Get all .json files recursively
-                $jsonFiles = Get-ChildItem -Path $extractedPath -Filter "sbom-*.json" -Recurse
+                $buildInfoObject = ConvertFrom-Json $buildInformation
+                $versionControlCommitNumber = $null
                 
-                # Iterate through each .json file
-                foreach ($file in $jsonFiles) 
+                foreach ($package in $buildInfoObject)
                 {
-                    Write-Host "Processing file: $($file.FullName)"
-                    
-                    New-OctopusArtifact -Path "$($file.FullName)" -Name "$releaseNumber.SBOM.JSON"
+                  Write-Host "The package to verify is $($package.PackageId) with version $($package.Version) with the VCSCommitNumber $($package.VcsCommitNumber)"
+                  if ($gitHubReleaseNumber -ne $package.Version)
+                  {
+                    Write-Host "The package version and GitHub Release Number $gitHubReleaseNumber DO NOT MATCH."
+                    continue     
+                  }  
+                
+                  Write-Host "The package version and GitHub Release Number $gitHubReleaseNumber match."
+                  $sbomGitRepoName = $gitHubRepoName.Replace("/", "-")
+                  $sbomFileName = "sbom-$($sbomGitRepoName)-$($package.VcsCommitNumber).json"
+                
+                  $downloadUrl = "https://github.com/$($gitHubRepoName)/releases/download/$($gitHubReleaseNumber)/$($sbomFileName)"
+                  Write-Host "Downloading the SBOM from $downloadUrl"
+                
+                  Invoke-RestMethod -Uri $downloadUrl -OutFile "sbom.json"
+                
+                  Write-Host "Attaching the download SBOM as a deployment artifact."
+                  New-OctopusArtifact -Path "sbom.json" -Name "$gitHubReleaseNumber.SBOM.JSON"
+                
+                  break
                 }
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
         }
-        worker_pool_variable = ""        
+        worker_pool_variable = ""
     }
 }
 
@@ -94,7 +111,7 @@ step "verify-docker-containers" {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $fileName = $OctopusParameters["Template.Sha.FileName"]
-                $objectToGetHash = $OctopusParameters["Template.Docker.Containers"]
+                $objectToGetHash = $OctopusParameters["Template.Artifacts"]
                 $githubRepo = $OctopusParameters["Template.Git.Repo"]
                 $gitReleaseNumber = $OctopusParameters["Template.Git.Release.Number"]
                 

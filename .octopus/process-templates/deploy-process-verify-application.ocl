@@ -37,6 +37,22 @@ parameter "Template.Docker.Containers" {
     label = "Artifacts to Verify"
 }
 
+parameter "Template.Git.Repo" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The owner and name of the Git repo.  For example `bobjwalker/trident`."
+    label = "GitHub Repo"
+}
+
+parameter "Template.Git.Release.Number" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The release number in GitHub that will be used to pull the files for comparison"
+    label = "GitHub Release Number"
+}
+
 step "attach-sbom-to-release" {
     name = "Attach SBOM to Release"
 
@@ -97,11 +113,14 @@ step "verify-docker-containers" {
         properties = {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Package].ExtractedPath"]
                 $fileName = $OctopusParameters["Template.Sha.FileName"]
                 $objectToGetHash = $OctopusParameters["Template.Docker.Containers"]
+                $githubRepo = $OctopusParameters["Template.Git.Repo"]
+                $gitReleaseNumber = $OctopusParameters["Template.Git.Release.Number"]
                 
-                $convertedFile = Get-Content -path "$($extractedPath)/$($fileName)" -raw | ConvertFrom-Json
+                Invoke-RestMethod -Uri https://github.com/$($githubRepo)/releases/download/$($gitReleaseNumber)/$($fileName) -OutFile "packagedhashes.json"
+                
+                $convertedFile = Get-Content -path "packagedhashes.json" -raw | ConvertFrom-Json
                 
                 $objectArray = $objectToGetHash.Split("`n")
                 foreach($packageItem in $objectArray)
@@ -171,17 +190,5 @@ step "verify-docker-containers" {
             OctopusUseBundledTooling = "False"
         }
         worker_pool_variable = ""
-
-        packages "Template.SBOM.Package" {
-            acquisition_location = "Server"
-            feed = "octopus-server-built-in"
-            package_id = ""
-            properties = {
-                Extract = "True"
-                PackageParameterName = "Template.SBOM.Package"
-                Purpose = ""
-                SelectionMode = "deferred"
-            }
-        }
     }
 }

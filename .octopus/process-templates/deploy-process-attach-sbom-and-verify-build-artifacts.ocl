@@ -1,2 +1,174 @@
 name = "Deploy Process - Attach SBOM and Verify Build Artifacts"
 description = "A process template that attaches the SBOM to the deployment and compares the SHA256 hashes of the build artifacts."
+
+icon {
+    color = "#CA1E1E"
+    id = "box-fragile"
+}
+
+parameter "Template.Sha.FileName" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The name of the JSON file in the SBOM package containing all the hashes to verify."
+    label = "File containing hashes"
+}
+
+parameter "Template.Docker.Containers" {
+    display_settings = {
+        Octopus.ControlType = "MultiLineText"
+    }
+    help_text = <<-EOT
+            The list of Docker containers or packages you want to verify haven't changed since the build server.  
+            
+            New line per item to verify.
+            
+            - For Docker containers use the format: `[owner]/[repo]:[version]`
+            - For packages use the format: `[packagename]:[version]`
+            EOT
+    label = "Artifacts to Verify"
+}
+
+parameter "Template.Git.Repo" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The owner and name of the Git repo.  For example `bobjwalker/trident`."
+    label = "GitHub Repo"
+}
+
+parameter "Template.Git.Release.Number" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The release number in GitHub that will be used to pull the files for comparison"
+    label = "GitHub Release Number"
+}
+
+step "attach-sbom-to-release" {
+    name = "Attach SBOM to Release"
+
+    action {
+        action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Will pull the SBOM from the GitHub Release and attach it as a deployment artifact.
+                EOT
+        properties = {
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Package].ExtractedPath"]
+                $releaseNumber = $OctopusParameters["Octopus.Release.Number"]
+                
+                # Get all .json files recursively
+                $jsonFiles = Get-ChildItem -Path $extractedPath -Filter "sbom-*.json" -Recurse
+                
+                # Iterate through each .json file
+                foreach ($file in $jsonFiles) 
+                {
+                    Write-Host "Processing file: $($file.FullName)"
+                    
+                    New-OctopusArtifact -Path "$($file.FullName)" -Name "$releaseNumber.SBOM.JSON"
+                }
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = ""        
+    }
+}
+
+step "verify-docker-containers" {
+    name = "Verify Package SHA"
+
+    action {
+        action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Will loop through the list of provided docker containers and packages and attempt to match it to one of the hashes in the manifest file found in the SBOM package.
+                EOT
+        properties = {
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $fileName = $OctopusParameters["Template.Sha.FileName"]
+                $objectToGetHash = $OctopusParameters["Template.Docker.Containers"]
+                $githubRepo = $OctopusParameters["Template.Git.Repo"]
+                $gitReleaseNumber = $OctopusParameters["Template.Git.Release.Number"]
+                
+                Invoke-RestMethod -Uri https://github.com/$($githubRepo)/releases/download/$($gitReleaseNumber)/$($fileName) -OutFile "packagedhashes.json"
+                
+                $convertedFile = Get-Content -path "packagedhashes.json" -raw | ConvertFrom-Json
+                
+                $objectArray = $objectToGetHash.Split("`n")
+                foreach($packageItem in $objectArray)
+                {  
+                  $artifactToCompare = $packageItem.Trim().Split(':')
+                  if ($artifactToCompare[0].Contains("/"))
+                  {
+                    Write-Host "$artifactToCompare is a docker container, pulling the manifest information from DockerHub."
+                    Write-Host "Invoking https://registry.hub.docker.com/v2/repositories/$($artifactToCompare[0])/tags?name=$($artifactToCompare[1])"
+                    $workerToolsTags = Invoke-RestMethod "https://registry.hub.docker.com/v2/repositories/$($artifactToCompare[0])/tags?name=$($artifactToCompare[1])"
+                  
+                    $matchingTag = $workerToolsTags.results | Where-Object { $_.name -eq $artifactToCompare[1] }
+                  
+                    $hashOfObject = $matchingTag.digest    
+                  }
+                  else
+                  {
+                    Write-Host "$artifactToCompare is a package from our local repo, getting the information from /octopus/Files/"
+                    $jsonFiles = Get-ChildItem -Path "/octopus/Files/" -Filter "*$($artifactToCompare[0])*$($artifactToCompare[1])*.zip" -Recurse
+                
+                    # Iterate through each .json file
+                    foreach ($file in $jsonFiles) 
+                    {
+                      Write-Host "Processing file: $($file.FullName)"
+                
+                      $rawHash = Get-FileHash -Path "$($file.FullName)" -Algorithm SHA256
+                      $hashOfObject = $rawHash.Hash
+                
+                      Write-Host "The hash of $($file.FullName) is $hashOfObject"
+                    }
+                  }
+                
+                  Write-Host "The hash we want to find is $hashOfObject"
+                
+                  $foundSha = $false
+                  # Loop through all the keys
+                  foreach ($key in $convertedFile.PSObject.Properties.Name) 
+                  {
+                     $item = $convertedFile.$key    
+                     Write-Host "The hash to compare is $item"
+                
+                     if ($item -eq $hashOfObject)
+                     {
+                       Write-Highlight "$artifactToCompare hash $hashOfObject matches the original build hash."
+                       $foundSha = $true
+                     }
+                     else 
+                     {
+                        Write-Host "The hash $item does not match the hash of the object $artifactToCompare"
+                     }
+                  }
+                
+                  if ($foundSha -eq $true)
+                  {
+                    Write-Host "The hash of $artifactToCompare was found in the file $fileContainingSha"
+                  }
+                  else 
+                  {
+                    Write-Error "The hash $hashOfObject for $artifactToCompare was not found, stopping the deployment."
+                  }
+                }
+                
+                
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = ""
+    }
+}

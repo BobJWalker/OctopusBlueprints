@@ -47,6 +47,7 @@ parameter "Template.Sha.FileName" {
 
 step "attach-sbom-to-release" {
     name = "Attach SBOM to Release"
+    package_requirement = "AfterPackageAcquisition"
 
     action {
         action_type = "Octopus.Script"
@@ -123,6 +124,7 @@ step "verify-docker-containers" {
                 foreach($packageItem in $objectArray)
                 {  
                   $artifactToCompare = $packageItem.Trim().Split(':')
+                  $hashOfObject = $null
                   if ($artifactToCompare[0].Contains("/"))
                   {
                     Write-Host "$artifactToCompare is a docker container, pulling the manifest information from DockerHub."
@@ -136,10 +138,10 @@ step "verify-docker-containers" {
                   else
                   {
                     Write-Host "$artifactToCompare is a package from our local repo, getting the information from /octopus/Files/"
-                    $jsonFiles = Get-ChildItem -Path "/octopus/Files/" -Filter "*$($artifactToCompare[0])*$($artifactToCompare[1])*.zip" -Recurse
+                    $zipFiles = Get-ChildItem -Path "/octopus/Files/" -Filter "*$($artifactToCompare[0])*$($artifactToCompare[1])*.zip" -Recurse
                 
                     # Iterate through each .json file
-                    foreach ($file in $jsonFiles) 
+                    foreach ($file in $zipFiles) 
                     {
                       Write-Host "Processing file: $($file.FullName)"
                 
@@ -150,6 +152,11 @@ step "verify-docker-containers" {
                     }
                   }
                 
+                  if ($null -eq $hashOfObject)
+                  {
+                    Write-Error "Unable to find the hash for $packageItem"
+                  }
+                  
                   Write-Host "The hash we want to find is $hashOfObject"
                 
                   $foundSha = $false

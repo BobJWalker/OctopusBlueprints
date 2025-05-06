@@ -35,6 +35,7 @@ step "attach-sbom-to-release" {
 
     action {
         action_type = "Octopus.Script"
+        is_required = true
         notes = <<-EOT
                 **Always Runs**
                 
@@ -97,6 +98,7 @@ step "verify-docker-containers" {
 
     action {
         action_type = "Octopus.Script"
+        is_required = true
         notes = <<-EOT
                 **Always Runs**
                 

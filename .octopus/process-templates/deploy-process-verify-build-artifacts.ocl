@@ -21,28 +21,12 @@ parameter "Template.Artifacts" {
     label = "Artifacts to Verify"
 }
 
-parameter "Template.Git.Repo" {
+parameter "Template.Git.AuthToken" {
     display_settings = {
-        Octopus.ControlType = "SingleLineText"
+        Octopus.ControlType = "Sensitive"
     }
-    help_text = "The owner and name of the Git repo.  For example `bobjwalker/trident`."
-    label = "GitHub Repo"
-}
-
-parameter "Template.Git.Release.Number" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = "The release number in GitHub that will be used to pull the files for comparison"
-    label = "GitHub Release Number"
-}
-
-parameter "Template.Sha.FileName" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = "The name of the JSON file in the SBOM package containing all the hashes to verify."
-    label = "File containing hashes"
+    help_text = "The token of a user with permission to download build artifacts from GitHub."
+    label = "GitHub Auth Token"
 }
 
 step "attach-sbom-to-release" {
@@ -60,34 +44,44 @@ step "attach-sbom-to-release" {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
-                $gitHubReleaseNumber = $OctopusParameters["Template.Git.Release.Number"]
-                $gitHubRepoName = $OctopusParameters["Template.Git.Repo"]
+                $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
+                $octopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 
                 $buildInfoObject = ConvertFrom-Json $buildInformation
-                $versionControlCommitNumber = $null
+                $package = $buildInfoObject[0]
                 
-                foreach ($package in $buildInfoObject)
+                $buildUrl = $package.BuildUrl
+                Write-Host "The build url is $buildUrl"
+                
+                $githubLessUrl = $package.BuildUrl -Replace "https://github.com/", ""
+                $artifactUrl = "https://api.github.com/repos/$($githubLessUrl)/artifacts"
+                Write-Host "The artifact url is $artifactUrl"
+                
+                $actionArtifacts = Invoke-RestMethod -uri $artifactUrl -Headers @{"Authorization" = "Bearer $gitHubToken" }
+                foreach ($artifact in $actionArtifacts.artifacts)
                 {
-                  Write-Host "The package to verify is $($package.PackageId) with version $($package.Version) with the VCSCommitNumber $($package.VcsCommitNumber)"
-                  if ($gitHubReleaseNumber -ne $package.Version)
+                  Write-Host "Processing $($artifact.name)"
+                  if ($artifact.name -ne "artifact-sbom")
                   {
-                    Write-Host "The package version and GitHub Release Number $gitHubReleaseNumber DO NOT MATCH."
-                    continue     
+                    continue
+                  }
+                
+                  Write-Host "Downloading the SBOM from $($artifact.archive_download_url)"
+                  Invoke-RestMethod -Uri $artifact.archive_download_url -OutFile "artifact-sbom.zip" -Headers @{"Authorization" = "Bearer $gitHubToken" }
+                }
+                
+                if ((test-path "artifact-sbom.zip") -eq $true)
+                {
+                  Expand-Archive -path "artifact-sbom.zip" -DestinationPath "./artifact-sbom"
+                  $sbomFiles = Get-ChildItem -Path "./artifact-sbom" -Filter "*.json" -Recurse
+                
+                  foreach ($sbom in $sbomFiles)
+                  {
+                    Write-Host "Attaching $($sbom.FullName) as an artifacts"
+                    New-OctopusArtifact -Path $sbom.FullName -Name "$OctopusEnvironmentName.SBOM.JSON"
+                
+                    break
                   }  
-                
-                  Write-Host "The package version and GitHub Release Number $gitHubReleaseNumber match."
-                  $sbomGitRepoName = $gitHubRepoName.Replace("/", "-")
-                  $sbomFileName = "sbom-$($sbomGitRepoName)-$($package.VcsCommitNumber).json"
-                
-                  $downloadUrl = "https://github.com/$($gitHubRepoName)/releases/download/$($gitHubReleaseNumber)/$($sbomFileName)"
-                  Write-Host "Downloading the SBOM from $downloadUrl"
-                
-                  Invoke-RestMethod -Uri $downloadUrl -OutFile "sbom.json"
-                
-                  Write-Host "Attaching the download SBOM as a deployment artifact."
-                  New-OctopusArtifact -Path "sbom.json" -Name "$gitHubReleaseNumber.SBOM.JSON"
-                
-                  break
                 }
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
@@ -111,14 +105,49 @@ step "verify-docker-containers" {
         properties = {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                $fileName = $OctopusParameters["Template.Sha.FileName"]
                 $objectToGetHash = $OctopusParameters["Template.Artifacts"]
-                $githubRepo = $OctopusParameters["Template.Git.Repo"]
-                $gitReleaseNumber = $OctopusParameters["Template.Git.Release.Number"]
+                $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
                 
-                Invoke-RestMethod -Uri https://github.com/$($githubRepo)/releases/download/$($gitReleaseNumber)/$($fileName) -OutFile "packagedhashes.json"
+                $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
+                $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 
-                $convertedFile = Get-Content -path "packagedhashes.json" -raw | ConvertFrom-Json
+                $buildInfoObject = ConvertFrom-Json $buildInformation
+                $package = $buildInfoObject[0]
+                
+                $buildUrl = $package.BuildUrl
+                Write-Host "The build url is $buildUrl"
+                
+                $githubLessUrl = $package.BuildUrl -Replace "https://github.com/", ""
+                $artifactUrl = "https://api.github.com/repos/$($githubLessUrl)/artifacts"
+                Write-Host "The artifact url is $artifactUrl"
+                
+                $actionArtifacts = Invoke-RestMethod -uri $artifactUrl -Headers @{"Authorization" = "Bearer $gitHubToken" }
+                foreach ($artifact in $actionArtifacts.artifacts)
+                {
+                  Write-Host "Processing $($artifact.name)"
+                  if ($artifact.name -ne "artifact-hashes")
+                  {
+                    continue
+                  }
+                
+                  Write-Host "The download url is $($artifact.archive_download_url)"
+                  Invoke-RestMethod -Uri $artifact.archive_download_url -OutFile "artifact-hashes.zip" -Headers @{"Authorization" = "Bearer $gitHubToken" }
+                }
+                
+                if ((test-path "artifact-hashes.zip") -eq $false)
+                {
+                  Write-Error "Unable to download the artifact from github that contains the build hashes"
+                }
+                Expand-Archive -path "artifact-hashes.zip" -DestinationPath "./artifact-hashes"
+                $artifactHashes = Get-ChildItem -Path "./artifact-hashes" -Filter "*.json" -Recurse
+                
+                foreach ($artifactHashFile in $artifactHashes)
+                {
+                  Write-Host "Attaching $($artifactHashFile.FullName) as an artifacts"
+                  New-OctopusArtifact -Path $artifactHashFile.FullName -Name "$OctopusEnvironmentName.packagedartifacts.JSON"
+                
+                  $convertedFile = Get-Content -path $($artifactHashFile.FullName) -raw | ConvertFrom-Json
+                }  
                 
                 $objectArray = $objectToGetHash.Split("`n")
                 foreach($packageItem in $objectArray)

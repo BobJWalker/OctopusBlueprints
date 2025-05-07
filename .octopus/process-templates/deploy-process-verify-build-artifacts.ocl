@@ -44,17 +44,38 @@ step "attach-sbom-to-release" {
         properties = {
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
+                $objectToGetHash = $OctopusParameters["Template.Artifacts"]
                 $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
-                $octopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
+                
+                $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
+                $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 
                 $buildInfoObject = ConvertFrom-Json $buildInformation
-                $package = $buildInfoObject[0]
                 
-                $buildUrl = $package.BuildUrl
-                Write-Host "The build url is $buildUrl"
+                $objectArray = $objectToGetHash.Split("`n")
+                $buildUrl = $null
+                foreach ($packageItem in $objectArray)
+                {
+                  $artifactToCompare = $packageItem.Trim().Split(':')
+                  Write-Host "The version to find in build information is $($artifactToCompare[1])"
+                  foreach ($package in $buildInfoObject)
+                  {
+                    Write-Host "Comparing $($package.Version) with $($artifactToCompare[1])"
+                    if ($artifactToCompare[1] -eq $package.Version)
+                    {
+                      Write-Host "Versions match, getting the build URL"
+                      $buildUrl = $package.BuildUrl
+                      Write-Host "The build url is $buildUrl"
+                    }
+                  }
+                }
                 
-                $githubLessUrl = $package.BuildUrl -Replace "https://github.com/", ""
+                if ($null -eq $buildUrl)
+                {
+                  Write-Error "Unable to pull the build information URL from the Octopus Build information using supplied versions in $objectToGetHash.  Check that the build information has been supplied and try again."
+                }
+                
+                $githubLessUrl = $buildUrl -Replace "https://github.com/", ""
                 $artifactUrl = "https://api.github.com/repos/$($githubLessUrl)/artifacts"
                 Write-Host "The artifact url is $artifactUrl"
                 
@@ -114,12 +135,31 @@ step "verify-docker-containers" {
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 
                 $buildInfoObject = ConvertFrom-Json $buildInformation
-                $package = $buildInfoObject[0]
                 
-                $buildUrl = $package.BuildUrl
-                Write-Host "The build url is $buildUrl"
+                $objectArray = $objectToGetHash.Split("`n")
+                $buildUrl = $null
+                foreach ($packageItem in $objectArray)
+                {
+                  $artifactToCompare = $packageItem.Trim().Split(':')
+                  Write-Host "The version to find in build information is $($artifactToCompare[1])"
+                  foreach ($package in $buildInfoObject)
+                  {
+                    Write-Host "Comparing $($package.Version) with $($artifactToCompare[1])"
+                    if ($artifactToCompare[1] -eq $package.Version)
+                    {
+                      Write-Host "Versions match, getting the build URL"
+                      $buildUrl = $package.BuildUrl
+                      Write-Host "The build url is $buildUrl"
+                    }
+                  }
+                }
                 
-                $githubLessUrl = $package.BuildUrl -Replace "https://github.com/", ""
+                if ($null -eq $buildUrl)
+                {
+                  Write-Error "Unable to pull the build information URL from the Octopus Build information using supplied versions in $objectToGetHash.  Check that the build information has been supplied and try again."
+                }
+                
+                $githubLessUrl = $buildUrl -Replace "https://github.com/", ""
                 $artifactUrl = "https://api.github.com/repos/$($githubLessUrl)/artifacts"
                 Write-Host "The artifact url is $artifactUrl"
                 
@@ -151,7 +191,6 @@ step "verify-docker-containers" {
                   $convertedFile = Get-Content -path $($artifactHashFile.FullName) -raw | ConvertFrom-Json
                 }  
                 
-                $objectArray = $objectToGetHash.Split("`n")
                 foreach($packageItem in $objectArray)
                 {  
                   $artifactToCompare = $packageItem.Trim().Split(':')

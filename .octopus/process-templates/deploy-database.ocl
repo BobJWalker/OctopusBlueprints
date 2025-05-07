@@ -272,7 +272,7 @@ step "calculate-deployment-mode" {
 
 step "build-delta-report" {
     condition = "Variable"
-    name = "Build Delta Report"
+    name = "Build Delta Report and check for auto approval"
     properties = {
         Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Calculate Deployment Mode].Output.RunOnDeploy}#{/unless}"
     }
@@ -282,7 +282,7 @@ step "build-delta-report" {
         notes = <<-EOT
                 **Runs on Deployments Only**
                 
-                Builds a report containing all the scripts that haven't run on the target database.
+                Builds a report containing all the scripts that haven't run on the target database.  Check the delta report for dangerous commands that require auto-approval.
                 EOT
         properties = {
             Octopus.Action.ExecutionTimeout.Minutes = "15"
@@ -293,6 +293,7 @@ step "build-delta-report" {
                 $projectExe = $OctopusParameters["Template.DbUp.Executable"]
                 $environmentName = $OctopusParameters["Octopus.Environment.Name"]
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.Database.Package].ExtractedPath"]
+                $stepName = $OctopusParameters["Octopus.Action.StepName"]
                 
                 Get-ChildItem -Path "$extractedPath" -File
                                 
@@ -312,6 +313,38 @@ step "build-delta-report" {
                                 
                 $generatedReport = "$changeReportDirectory/UpgradeReport.html"
                 New-OctopusArtifact -Path "$generatedReport" -Name "$environmentName.UpgradeReport.html"
+                
+                $CommandsRequireApproval = "Create Table,Alter Table,Drop Table,Drop View,Create View,Create Function,Drop Function,sp_addrolemember,sp_droprolemember,alter role,Merge,Create Schema"
+                
+                $ApprovalRequired = $false
+                
+                $fileContent = Get-Content -path $generatedReport
+                
+                $commandListToCheck = $CommandsRequireApproval -split ","
+                Write-Host "Looping through all commands requiring approval for $generatedReport"
+                foreach ($command in $commandListToCheck)
+                {
+                 	Write-Host "Checking $generatedReport for command $command"
+                   	$foundCommand = $fileContent -match "$command"
+                    
+                   	if ($foundCommand)
+                    {
+                      	Write-Highlight "$generatedReport has the command '$command'"
+                        $ApprovalRequired = $true        
+                    }
+                }
+                
+                if ($approvalRequired -eq $false)
+                {
+                	Write-Highlight "All scripts look good"
+                }
+                else
+                {
+                	Write-Highlight "One or more commands found requires a DBA to approve."
+                }
+                
+                Set-OctopusVariable -name "ApprovalRequired" -value $ApprovalRequired
+                Write-Host "Variable run conditions: ##{unless Octopus.Deployment.Error}#{Octopus.Action[$stepName].Output.ApprovalRequired}##{/unless}"
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
@@ -336,7 +369,7 @@ step "notify-dbas" {
     condition = "Variable"
     name = "Notify DBAs"
     properties = {
-        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Calculate Deployment Mode].Output.RunOnDeploy}#{/unless}"
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Calculate Deployment Mode].Output.ApprovalRequired}#{/unless}"
     }
 
     action {
@@ -359,7 +392,7 @@ step "dbas-approve-delta-script" {
     condition = "Variable"
     name = "DBAs Approve Delta Script"
     properties = {
-        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Calculate Deployment Mode].Output.RunOnDeploy}#{/unless}"
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Calculate Deployment Mode].Output.ApprovalRequired}#{/unless}"
     }
     start_trigger = "StartWithPrevious"
 

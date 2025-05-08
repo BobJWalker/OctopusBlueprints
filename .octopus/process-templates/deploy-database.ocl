@@ -369,7 +369,7 @@ step "notify-dbas" {
     condition = "Variable"
     name = "Notify DBAs"
     properties = {
-        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Calculate Deployment Mode].Output.ApprovalRequired}#{/unless}"
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Build Delta Report and check for auto approval].Output.ApprovalRequired}#{/unless}"
     }
 
     action {
@@ -392,7 +392,7 @@ step "dbas-approve-delta-script" {
     condition = "Variable"
     name = "DBAs Approve Delta Script"
     properties = {
-        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Calculate Deployment Mode].Output.ApprovalRequired}#{/unless}"
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.Action[Deploy Databases-Build Delta Report and check for auto approval].Output.ApprovalRequired}#{/unless}"
     }
     start_trigger = "StartWithPrevious"
 

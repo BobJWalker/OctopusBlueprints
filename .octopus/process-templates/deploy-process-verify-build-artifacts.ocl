@@ -207,9 +207,17 @@ step "verify-docker-containers" {
                   }
                   else
                   {
-                    Write-Host "$artifactToCompare is a package from our local repo, getting the information from /octopus/Files/"
-                    $zipFiles = Get-ChildItem -Path "/octopus/Files/" -Filter "*$($artifactToCompare[0])*$($artifactToCompare[1])*.zip" -Recurse
-                
+                    if (Test-Path "/octopus/Files/")
+                    {
+                      Write-Host "$artifactToCompare is a package from our local repo, getting the information from /octopus/Files/"
+                      $zipFiles = Get-ChildItem -Path "/octopus/Files/" -Filter "*$($artifactToCompare[0])*$($artifactToCompare[1])*.zip" -Recurse
+                    }
+                    else
+                    {
+                      Write-Host "$artifactToCompare is a package from our local repo, getting the information from /home/Octopus/Files"
+                      $zipFiles = Get-ChildItem -Path "/home/Octopus/Files" -Filter "*$($artifactToCompare[0])*$($artifactToCompare[1])*.zip" -Recurse
+                    }
+                    
                     # Iterate through each .json file
                     foreach ($file in $zipFiles) 
                     {

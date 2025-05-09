@@ -177,6 +177,8 @@ step "azure-sql-create-database-if-not-exists" {
                 
                         $command.CommandText += ";"
                         Write-Host "Executing $($command.CommandText)"
+                
+                        $result = $command.ExecuteNonQuery()
                         Write-Verbose "ExecuteNonQuery result: $result"
                 
                         Write-Output "Successfully executed the database creation script for $createDatabaseName"
@@ -209,6 +211,8 @@ step "verify-database-creation" {
                 Runs a script on the database to make sure it was successfully created.
                 EOT
         properties = {
+            Octopus.Action.AutoRetry.MaximumCount = "3"
+            Octopus.Action.AutoRetry.MinimumBackoff = "15"
             Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $scriptToRun = "Select 1 as Number"

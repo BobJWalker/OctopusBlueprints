@@ -56,7 +56,7 @@ parameter "Template.Kubernetes.Namespace.Name" {
 }
 
 step "azure-sql-create-database-if-not-exists" {
-    name = "Azure SQL - Create Database If Not Exists"
+    name = "SQL - Create Database If Not Exists - Azure or Local"
 
     action {
         action_type = "Octopus.Script"
@@ -64,7 +64,7 @@ step "azure-sql-create-database-if-not-exists" {
         notes = <<-EOT
                 **Always Runs**
                 
-                Runs a script on the Azure Sql Server to ensure the database exists and is configured as a serverless general purpose database with 1 vCore.
+                Runs a script on a local or Azure Sql Server to ensure the database exists and is configured as a serverless general purpose database with 1 vCore.
                 EOT
         properties = {
             Octopus.Action.AutoRetry.MaximumCount = "3"
@@ -75,7 +75,7 @@ step "azure-sql-create-database-if-not-exists" {
                 $createSqlLoginUserWhoHasCreateUserRights = $OctopusParameters["Template.SQLServer.User.Name"]
                 $createSqlLoginPasswordWhoHasRights = $OctopusParameters["Template.SQLServer.User.Password"]
                 $createDatabaseName = $OctopusParameters["Template.SQLServer.Database.Name"]
-                $createCommandTimeout = 30
+                $createCommandTimeout = 60
                 $createSqlDatabaseRetryAttempts = 3
                 
                 if ([string]::IsNullOrWhiteSpace($createSqlLoginUserWhoHasCreateUserRights) -eq $true) {
@@ -155,21 +155,28 @@ step "azure-sql-create-database-if-not-exists" {
                         $command.CommandText = "IF NOT EXISTS (select Name from sys.databases where Name = '$escapedDatabaseName')
                         create database [$createDatabaseName]"
                         
-                        $createAzureEdition = "GeneralPurpose"        
-                        Write-Verbose "Specifying Azure SqlDb Edition: $($createAzureEdition)"
-                        $command.CommandText += ("`r`n (EDITION = '{0}'" -f $createAzureEdition)
+                        if ($createSqlServer -like '*.database.windows.net')
+                        {
+                          Write-Host "The SQL Server is an azure sql server, adding Azure SQL Syntax"
+                          $createAzureEdition = "GeneralPurpose"        
+                          Write-Verbose "Specifying Azure SqlDb Edition: $($createAzureEdition)"
+                          $command.CommandText += ("`r`n (EDITION = '{0}'" -f $createAzureEdition)
                         
-                        $createAzureServiceObjective = "GP_S_Gen5_1"
-                        Write-Verbose "Specifying Azure SqlDb Service Objective to: $($createAzureEdition)"
-                        $command.CommandText += (", SERVICE_OBJECTIVE = '{0}')" -f $createAzureServiceObjective)
+                          $createAzureServiceObjective = "GP_S_Gen5_1"
+                          Write-Verbose "Specifying Azure SqlDb Service Objective to: $($createAzureEdition)"
+                          $command.CommandText += (", SERVICE_OBJECTIVE = '{0}')" -f $createAzureServiceObjective)
                         
-                		$createAzureBackupStorageRedundancy = "LOCAL"
-                		Write-Verbose "Specifying Azure Backup storage redundancy: $($createAzureBackupStorageRedundancy)"
-                        $command.CommandText += ("`r`n WITH BACKUP_STORAGE_REDUNDANCY='{0}'" -f $createAzureBackupStorageRedundancy)        
+                		  $createAzureBackupStorageRedundancy = "LOCAL"
+                		  Write-Verbose "Specifying Azure Backup storage redundancy: $($createAzureBackupStorageRedundancy)"
+                          $command.CommandText += ("`r`n WITH BACKUP_STORAGE_REDUNDANCY='{0}'" -f $createAzureBackupStorageRedundancy)
+                        }
+                        else
+                        {
+                          Write-Host "The SQL Server appears to be local, skipping the Azure SQL Syntax."
+                        }
                 
                         $command.CommandText += ";"
-                
-                        $result = $command.ExecuteNonQuery()
+                        Write-Host "Executing $($command.CommandText)"
                         Write-Verbose "ExecuteNonQuery result: $result"
                 
                         Write-Output "Successfully executed the database creation script for $createDatabaseName"

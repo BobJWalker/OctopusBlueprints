@@ -16,7 +16,7 @@ parameter "Template.ScriptToRun.Text" {
 
 parameter "Template.SQLServer.Name" {
     display_settings = {
-        Octopus.ControlType = "Sensitive"
+        Octopus.ControlType = "SingleLineText"
     }
     help_text = "The URL or IP Address of the SQL Server to perform the work on"
     label = "SQL Server Name"
@@ -24,7 +24,7 @@ parameter "Template.SQLServer.Name" {
 
 parameter "Template.SQLServer.User.Name" {
     display_settings = {
-        Octopus.ControlType = "Sensitive"
+        Octopus.ControlType = "SingleLineText"
     }
     help_text = <<-EOT
             
@@ -37,7 +37,7 @@ parameter "Template.SQLServer.User.Name" {
 
 parameter "Template.SQLServer.User.Password" {
     display_settings = {
-        Octopus.ControlType = "Sensitive"
+        Octopus.ControlType = "SingleLineText"
     }
     help_text = <<-EOT
             The password of the user who has permissions to run the adhoc script on the database
@@ -49,7 +49,7 @@ parameter "Template.SQLServer.User.Password" {
 
 parameter "Template.SQLServer.Database.Name" {
     display_settings = {
-        Octopus.ControlType = "Sensitive"
+        Octopus.ControlType = "SingleLineText"
     }
     help_text = "The name of the database to to run the script on"
     label = "Database to Delete"

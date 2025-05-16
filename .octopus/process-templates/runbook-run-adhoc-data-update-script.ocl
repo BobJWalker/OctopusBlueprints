@@ -237,7 +237,7 @@ step "notify-dbas-of-pending-changes" {
                 Click here to approve or reject: #{Octopus.Web.ServerUri}/app#/#{Octopus.Space.Id}/tasks/#{Octopus.Task.Id}
                 EOT
             Octopus.Action.Email.Subject = "Data Update Script Requires Approval"
-            Octopus.Action.Email.To = "dbas@octopus.com"
+            Octopus.Action.Email.To = "rjwalker28@gmail.com"
         }
         worker_pool_variable = ""
     }

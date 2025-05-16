@@ -314,7 +314,7 @@ step "build-delta-report" {
                 $generatedReport = "$changeReportDirectory/UpgradeReport.html"
                 New-OctopusArtifact -Path "$generatedReport" -Name "$environmentName.UpgradeReport.html"
                 
-                $CommandsRequireApproval = "Create Table,Alter Table,Drop Table,Drop View,Create Function,Drop Function,sp_addrolemember,sp_droprolemember,alter role,Merge,Create Schema"
+                $CommandsRequireApproval = "Create Table,Alter Table,Drop Table,Create View,Drop View,Create Function,Drop Function,sp_addrolemember,sp_droprolemember,alter role,Merge,Create Schema"
                 
                 $ApprovalRequired = $false
                 

@@ -282,7 +282,7 @@ step "build-delta-report" {
         notes = <<-EOT
                 **Runs on Deployments Only**
                 
-                Builds a report containing all the scripts that haven't run on the target database.  Check the delta report for dangerous commands that require auto-approval.
+                Builds a report containing all the scripts that haven't run on the target database.  Check the delta report for dangerous commands that require approval.
                 EOT
         properties = {
             Octopus.Action.ExecutionTimeout.Minutes = "15"

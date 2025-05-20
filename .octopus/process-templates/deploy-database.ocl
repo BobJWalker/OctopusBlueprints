@@ -54,7 +54,7 @@ step "build-delta-report" {
     action {
         action_type = "Octopus.Script"
         notes = <<-EOT
-                **Runs on Deployments Only**
+                **Always Runs**
                 
                 Builds a report containing all the scripts that haven't run on the target database.  Check the delta report for dangerous commands that require approval.
                 EOT
@@ -150,7 +150,7 @@ step "notify-dbas" {
         action_type = "Octopus.Email"
         is_required = true
         notes = <<-EOT
-                **Runs on Deployments Only**
+                **Runs when a dangerous sql command is detected**
                 
                 Sends out an email notifying DBAs there is a pending change for them to review.
                 EOT
@@ -173,7 +173,7 @@ step "dbas-approve-delta-script" {
     action {
         action_type = "Octopus.Manual"
         notes = <<-EOT
-                **Runs on Deployments Only**
+                **Runs when a dangerous sql command is detected**
                 
                 Pauses the deployment to allow DBAs to review the delta script for any potential destructive actions on the database.
                 EOT
@@ -191,7 +191,7 @@ step "deploy-database-changes" {
     action {
         action_type = "Octopus.Script"
         notes = <<-EOT
-                **Runs on Deployments Only**
+                **Always Runs**
                 
                 Deploys the database changes by running the scripts found in the package.
                 EOT

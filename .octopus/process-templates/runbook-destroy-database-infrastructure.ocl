@@ -1,2 +1,7 @@
 name = "Runbook - Destroy Database Infrastructure"
-description = ""
+description = "Runbook process that will destroy the database infrastructure to host this application"
+
+icon {
+    color = "#CA1E1E"
+    id = "database"
+}

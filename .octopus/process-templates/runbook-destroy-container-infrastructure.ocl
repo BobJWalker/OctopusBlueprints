@@ -6,47 +6,6 @@ icon {
     id = "tools"
 }
 
-parameter "Template.SQLServer.Name" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = "The URL or IP Address of the SQL Server to perform the work on"
-    label = "SQL Server Name"
-}
-
-parameter "Template.SQLServer.User.Name" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = <<-EOT
-            
-            The login of the user who has permissions to delete a database.
-            
-            Leave blank for integrated security
-            EOT
-    label = "SQL Server Username"
-}
-
-parameter "Template.SQLServer.User.Password" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = <<-EOT
-            The password of the user who has permissions to delete databases.
-            
-            Leave blank for integrated security
-            EOT
-    label = "SQL Password"
-}
-
-parameter "Template.SQLServer.Database.Name" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = "The name of the database to delete"
-    label = "Database to Delete"
-}
-
 parameter "Template.Kubernetes.Namespace.Name" {
     display_settings = {
         Octopus.ControlType = "SingleLineText"
@@ -83,62 +42,6 @@ step "delete-kubernetes-namespace" {
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
-        }
-        worker_pool_variable = ""
-    }
-}
-
-step "sql-delete-database" {
-    name = "SQL Delete Database"
-
-    action {
-        action_type = "Octopus.Script"
-        notes = <<-EOT
-                **Always Runs**
-                
-                Deletes the database from SQL Server
-                EOT
-        properties = {
-            Octopus.Action.RunOnServer = "false"
-            Octopus.Action.Script.ScriptBody = <<-EOT
-                $createSqlServer = $OctopusParameters["Template.SQLServer.Name"]
-                $createSqlLoginUserWhoHasCreateUserRights = $OctopusParameters["Template.SQLServer.User.Name"]
-                $createSqlLoginPasswordWhoHasRights = $OctopusParameters["Template.SQLServer.User.Password"]
-                $deleteDatabaseName = $OctopusParameters["Template.SQLServer.Database.Name"]
-                
-                if ([string]::IsNullOrWhiteSpace($createSqlLoginUserWhoHasCreateUserRights) -eq $true){
-                	Write-Host "No username found, using integrated security"
-                    $connectionString = "Server=$createSqlServer;Database=master;integrated security=true;"
-                }
-                else {
-                	Write-Host "Username found, using SQL Authentication"
-                    $connectionString = "Server=$createSqlServer;Database=master;User ID=$createSqlLoginUserWhoHasCreateUserRights;Password=$createSqlLoginPasswordWhoHasRights;"
-                }
-                
-                $sqlConnection = New-Object System.Data.SqlClient.SqlConnection
-                $sqlConnection.ConnectionString = $connectionString
-                
-                $command = $sqlConnection.CreateCommand()
-                $command.CommandType = [System.Data.CommandType]'Text'
-                
-                Write-Host "Opening the connection to $createSqlServer"
-                $sqlConnection.Open()
-                
-                $escapedDatabaseName = $deleteDatabaseName.Replace("'", "''")
-                
-                Write-Host "Running the if exists then delete for $createDatabaseName"
-                $command.CommandText = "IF EXISTS (select Name from sys.databases where Name = '$escapedDatabaseName')
-                        drop database [$deleteDatabaseName]"            
-                $command.ExecuteNonQuery()
-                
-                
-                Write-Host "Successfully dropped the database $createDatabaseName"
-                Write-Host "Closing the connection to $createSqlServer"
-                $sqlConnection.Close()
-                EOT
-            Octopus.Action.Script.ScriptSource = "Inline"
-            Octopus.Action.Script.Syntax = "PowerShell"
-            OctopusUseBundledTooling = "False"
         }
         worker_pool_variable = ""
     }

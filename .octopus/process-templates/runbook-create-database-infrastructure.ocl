@@ -3,7 +3,7 @@ description = "Runbook process that will create the necessary database infrastru
 
 icon {
     color = "#25D284"
-    id = "database"
+    id = "computer-classic"
 }
 
 parameter "Template.SQLServer.Name" {

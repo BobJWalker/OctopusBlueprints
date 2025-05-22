@@ -1,2 +1,7 @@
 name = "Runbook - Create Database Infrastructure"
-description = "Runbook that will create the necessary database infrastructure to host an application."
+description = "Runbook process that will create the necessary database infrastructure to host an application."
+
+icon {
+    color = "#25D284"
+    id = "database"
+}

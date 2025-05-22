@@ -3,7 +3,7 @@ description = "Runbook process that will destroy the database infrastructure to 
 
 icon {
     color = "#CA1E1E"
-    id = "database"
+    id = "computer-classic"
 }
 
 parameter "Template.SQLServer.Name" {

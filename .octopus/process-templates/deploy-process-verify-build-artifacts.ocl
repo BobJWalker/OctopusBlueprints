@@ -2,7 +2,7 @@ name = "Deploy Process - Attach SBOM and Verify Build Artifacts"
 description = "A process template that attaches the SBOM to the deployment and compares the SHA256 hashes of the build artifacts."
 
 icon {
-    color = "#CA1E1E"
+    color = "#173B56"
     id = "box-fragile"
 }
 

@@ -2,7 +2,7 @@ name = "Runbook - Create Azure Web App with staging slot "
 description = "A process template will be created for the resource group, app service plan, and Azure Web App with a Staging Slot, and it will be registered with Octopus Deploy."
 
 icon {
-    color = "#3CA4F3"
+    color = "#25D284"
     id = "router"
 }
 

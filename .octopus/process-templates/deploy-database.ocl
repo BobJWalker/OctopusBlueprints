@@ -40,12 +40,28 @@ parameter "Template.Database.ChangeReportDirectory" {
     value "../../#{Octopus.Project.Name}/#{Octopus.Release.Number}/#{Octopus.Environment.Name}" {}
 }
 
-parameter "Template.Notification.Email" {
+parameter "Template.WorkerPool" {
     display_settings = {
-        Octopus.ControlType = "SingleLineText"
+        Octopus.ControlType = "WorkerPool"
     }
-    help_text = "**Required:** The email addresses (separated by `;`) of the people to be notified for approval of the delta script."
-    label = "Notification Email Addresses"
+    help_text = "**Required:** The worker pool on which the deployment steps will run.  "
+    label = "Worker Pool"
+}
+
+parameter "Template.Approval.Environments" {
+    display_settings = {
+        Octopus.ControlType = "Environments"
+    }
+    help_text = "**Required:** The environments where the approval should take place.  "
+    label = "Approval Environment"
+}
+
+parameter "Template.Approval.Teams" {
+    display_settings = {
+        Octopus.ControlType = "Teams"
+    }
+    help_text = "**Required:** The DBA team that can approve the database deployment"
+    label = "Approval Team"
 }
 
 step "build-delta-report" {
@@ -124,6 +140,7 @@ step "build-delta-report" {
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
         }
+        worker_pool_variable = "#{Template.WorkerPool}"
 
         packages "Template.Database.Package" {
             acquisition_location = "Server"
@@ -148,6 +165,7 @@ step "notify-dbas" {
 
     action {
         action_type = "Octopus.Email"
+        environments_variable = "#{Template.Approval.Environments}"
         is_required = true
         notes = <<-EOT
                 **Runs when a dangerous sql command is detected**
@@ -157,7 +175,7 @@ step "notify-dbas" {
         properties = {
             Octopus.Action.Email.Body = "You can view the the deployment here: #{Octopus.Web.ServerUri}/app#/#{Octopus.Space.Id}/tasks/#{Octopus.Task.Id}."
             Octopus.Action.Email.Subject = "#{Octopus.Project.Name} #{Octopus.Release.Number} to #{Octopus.Environment.Name} has paused and is awaiting review."
-            Octopus.Action.Email.To = "#{Template.Notification.Email}"
+            Octopus.Action.Email.ToTeamIds = "#{Template.Approval.Teams}"
         }
     }
 }
@@ -172,6 +190,7 @@ step "dbas-approve-delta-script" {
 
     action {
         action_type = "Octopus.Manual"
+        environments_variable = "#{Template.Approval.Environments}"
         notes = <<-EOT
                 **Runs when a dangerous sql command is detected**
                 
@@ -180,7 +199,7 @@ step "dbas-approve-delta-script" {
         properties = {
             Octopus.Action.Manual.BlockConcurrentDeployments = "True"
             Octopus.Action.Manual.Instructions = "Please review and verify the migration database report matches your expectations."
-            Octopus.Action.Manual.ResponsibleTeamIds = "global/everyone"
+            Octopus.Action.Manual.ResponsibleTeamIds = "#{Template.Approval.Teams}"
         }
     }
 }
@@ -215,6 +234,7 @@ step "deploy-database-changes" {
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
         }
+        worker_pool_variable = "#{Template.WorkerPool}"
 
         packages "Template.Database.Package" {
             acquisition_location = "Server"

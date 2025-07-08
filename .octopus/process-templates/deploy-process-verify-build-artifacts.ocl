@@ -29,12 +29,29 @@ parameter "Template.Git.AuthToken" {
     label = "GitHub Auth Token"
 }
 
+parameter "Template.Verify.WorkerPool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "**Required:** The worker pool on which these steps will execute."
+    label = "Worker Pool"
+}
+
+parameter "Template.Verify.Environments" {
+    display_settings = {
+        Octopus.ControlType = "Environments"
+    }
+    help_text = "**Required:** The list of environments on which to run these steps."
+    label = "Verify Environments"
+}
+
 step "attach-sbom-to-release" {
     name = "Attach SBOM to Release"
     package_requirement = "AfterPackageAcquisition"
 
     action {
         action_type = "Octopus.Script"
+        environments_variable = "#{Template.Verify.Environments}"
         is_required = true
         notes = <<-EOT
                 **Always Runs**
@@ -42,7 +59,7 @@ step "attach-sbom-to-release" {
                 Will pull the SBOM from the GitHub Release and attach it as a deployment artifact.
                 EOT
         properties = {
-            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $objectToGetHash = $OctopusParameters["Template.Artifacts"]
                 $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
@@ -110,7 +127,7 @@ step "attach-sbom-to-release" {
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
         }
-        worker_pool_variable = ""
+        worker_pool_variable = "#{Template.Verify.WorkerPool}"
     }
 }
 
@@ -119,6 +136,7 @@ step "verify-docker-containers" {
 
     action {
         action_type = "Octopus.Script"
+        environments_variable = "#{Template.Verify.Environments}"
         is_required = true
         notes = <<-EOT
                 **Always Runs**
@@ -126,7 +144,7 @@ step "verify-docker-containers" {
                 Will loop through the list of provided docker containers and packages and attempt to match it to one of the hashes in the manifest file found in the SBOM package.
                 EOT
         properties = {
-            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $objectToGetHash = $OctopusParameters["Template.Artifacts"]
                 $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
@@ -271,6 +289,6 @@ step "verify-docker-containers" {
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
         }
-        worker_pool_variable = ""
+        worker_pool_variable = "#{Template.Verify.WorkerPool}"
     }
 }

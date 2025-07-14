@@ -47,6 +47,14 @@ parameter "Template.SQLServer.Database.Name" {
     label = "Database to Delete"
 }
 
+parameter "Template.WorkerPool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "The worker pool on which to execute the process template."
+    label = "Worker Pool"
+}
+
 step "sql-delete-database" {
     name = "SQL Delete Database"
 
@@ -58,7 +66,7 @@ step "sql-delete-database" {
                 Deletes the database from SQL Server
                 EOT
         properties = {
-            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $createSqlServer = $OctopusParameters["Template.SQLServer.Name"]
                 $createSqlLoginUserWhoHasCreateUserRights = $OctopusParameters["Template.SQLServer.User.Name"]
@@ -99,6 +107,6 @@ step "sql-delete-database" {
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
         }
-        worker_pool_variable = ""
+        worker_pool_variable = "#{Template.WorkerPool}"
     }
 }

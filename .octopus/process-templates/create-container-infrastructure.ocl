@@ -14,8 +14,19 @@ parameter "Template.Kubernetes.Namespace.Name" {
     label = "Kubernetes Namespace Name"
 }
 
+parameter "Template.Kubernetes.TargetTags" {
+    display_settings = {
+        Octopus.ControlType = "TargetTags"
+    }
+    help_text = "The tags of the Kubernetes cluster on which you want to execute this process template."
+    label = "Kubernetes Target Tags"
+}
+
 step "create-application-namespace" {
     name = "Create Application Namespace"
+    properties = {
+        Octopus.Action.TargetRoles = "template"
+    }
 
     action {
         action_type = "Octopus.KubernetesRunScript"

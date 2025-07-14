@@ -14,8 +14,19 @@ parameter "Template.Kubernetes.Namespace.Name" {
     label = "Kubernetes Namespace Name"
 }
 
+parameter "Template.Kubernetes.TargetTags" {
+    display_settings = {
+        Octopus.ControlType = "TargetTags"
+    }
+    help_text = "The tags of the Kubernetes Cluster on which to run this process template."
+    label = "Kubernetes Target Tags"
+}
+
 step "delete-kubernetes-namespace" {
     name = "Delete Kubernetes Namespace"
+    properties = {
+        Octopus.Action.TargetRoles = "template"
+    }
 
     action {
         action_type = "Octopus.KubernetesRunScript"

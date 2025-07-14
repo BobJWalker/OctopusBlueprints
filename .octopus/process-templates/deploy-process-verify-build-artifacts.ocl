@@ -23,7 +23,7 @@ parameter "Template.Artifacts" {
 
 parameter "Template.Git.AuthToken" {
     display_settings = {
-        Octopus.ControlType = "Sensitive"
+        Octopus.ControlType = "SingleLineText"
     }
     help_text = "The token of a user with permission to download build artifacts from GitHub."
     label = "GitHub Auth Token"

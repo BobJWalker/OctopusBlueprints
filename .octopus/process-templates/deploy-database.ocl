@@ -198,7 +198,7 @@ step "dbas-approve-delta-script" {
                 EOT
         properties = {
             Octopus.Action.Manual.BlockConcurrentDeployments = "True"
-            Octopus.Action.Manual.Instructions = "Please review and verify the migration database report matches your expectations."
+            Octopus.Action.Manual.Instructions = "Please review and verify the migration database report matches your expectations for a deployment."
             Octopus.Action.Manual.ResponsibleTeamIds = "#{Template.Approval.Teams}"
         }
     }

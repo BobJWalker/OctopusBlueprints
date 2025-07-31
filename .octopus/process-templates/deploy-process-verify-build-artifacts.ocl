@@ -192,14 +192,21 @@ step "verify-docker-containers" {
                 foreach($packageItem in $objectArray)
                 {    
                   $artifactToCompare = $packageItem.Trim().Split(':')
+                  $packageName = $artifactToCompare[0]
                   
                   if ($packageItem.Contains("/"))
                   {
                       $imageToAttest = "oci://$packageItem"
                 
+                      Write-Host "Attesting to $imageToAttest in the repo $githubLessUrl"
                       $attestation=gh attestation verify "$imageToAttest" --repo $githubLessUrl --format json 
-                      New-Item -Path . -Name "$($artifactToCompare[0]).$($OctopusEnvironmentName).attestation.json" -ItemType "File" -Value $attestation
-                      New-OctopusArtifact -Path "$($artifactToCompare[0]).$($OctopusEnvironmentName).attestation.json" -Name  "$($artifactToCompare[0]).$($OctopusEnvironmentName).attestation.json"
+                
+                      Write-Host "The result of the attestation was $LASTEXITCODE"
+                      Write-Verbose $attestation
+                
+                      Write-Host "Writing the attest output to $packageName.$OctopusEnvironmentName.attestation.json"
+                      New-Item -Name "$packageName.$OctopusEnvironmentName.attestation.json" -ItemType "File" -Value $attestation
+                      New-OctopusArtifact -Path "$packageName.$OctopusEnvironmentName.attestation.json" -Name  "$packageName.$OctopusEnvironmentName.attestation.json"
                   }
                   else
                   {    
@@ -216,9 +223,15 @@ step "verify-docker-containers" {
                         
                     foreach ($file in $zipFiles) 
                     {
+                      Write-Host "Attesting to $imageToAttest in the repo $githubLessUrl"
                       $attestation=gh attestation verify "$($file.FullName)" --repo $githubLessUrl --format json
-                      New-Item -Path . -Name "$($artifactToCompare[0]).$($OctopusEnvironmentName).attestation.json" -ItemType "File" -Value $attestation
-                      New-OctopusArtifact -Path "$($artifactToCompare[0]).$($OctopusEnvironmentName).attestation.json" -Name  "$($artifactToCompare[0]).$($OctopusEnvironmentName).attestation.json"
+                
+                      Write-Host "The result of the attestation was $LASTEXITCODE"
+                      Write-Verbose $attestation
+                
+                      Write-Host "Writing the attest output to $packageName.$OctopusEnvironmentName.attestation.json"
+                      New-Item -Name "$packageName.$OctopusEnvironmentName.attestation.json" -ItemType "File" -Value $attestation
+                      New-OctopusArtifact -Path "$packageName.$OctopusEnvironmentName.attestation.json" -Name  "$packageName.$OctopusEnvironmentName.attestation.json"
                     }
                   }
                 }

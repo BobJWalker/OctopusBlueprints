@@ -140,7 +140,7 @@ step "attach-sbom-to-release" {
 }
 
 step "verify-docker-containers" {
-    name = "Verify Deployment Artifact Attestations"
+    name = "Run Attestation Verification on Build Artifacts"
 
     action {
         action_type = "Octopus.Script"
@@ -220,10 +220,15 @@ step "verify-docker-containers" {
                       Write-Host "$artifactToCompare is a package from our local repo, getting the information from /home/Octopus/Files"
                       $zipFiles = Get-ChildItem -Path "/home/Octopus/Files" -Filter "*$($artifactToCompare[0])*$($artifactToCompare[1])*.zip" -Recurse
                     }
-                        
+                    
                     foreach ($file in $zipFiles) 
                     {
-                      Write-Host "Attesting to $imageToAttest in the repo $githubLessUrl"
+                      if (test-path "$packageName.$OctopusEnvironmentName.attestation.json")
+                      {
+                        Continue
+                      }
+                      
+                      Write-Host "Attesting to $($file.FullName) in the repo $githubLessUrl"
                       $attestation=gh attestation verify "$($file.FullName)" --repo $githubLessUrl --format json
                 
                       Write-Highlight "$packageItem successfully passed attestation verification"

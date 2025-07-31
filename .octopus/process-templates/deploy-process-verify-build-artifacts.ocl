@@ -192,7 +192,7 @@ step "verify-docker-containers" {
                 foreach($packageItem in $objectArray)
                 {    
                   $artifactToCompare = $packageItem.Trim().Split(':')
-                  $packageName = $artifactToCompare[0]
+                  $packageName = $artifactToCompare[0].Replace("/", "")
                   
                   if ($packageItem.Contains("/"))
                   {

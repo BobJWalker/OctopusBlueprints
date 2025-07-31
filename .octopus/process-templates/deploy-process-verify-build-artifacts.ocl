@@ -220,7 +220,8 @@ step "verify-docker-containers" {
                       Write-Host "$artifactToCompare is a package from our local repo, getting the information from /home/Octopus/Files"
                       $zipFiles = Get-ChildItem -Path "/home/Octopus/Files" -Filter "*$($artifactToCompare)*$($versionToCompare)@*.zip" -Recurse
                     }
-                    
+                
+                    $artifactVerified = $false
                     foreach ($file in $zipFiles) 
                     {
                       if (test-path "$packageName.$OctopusEnvironmentName.attestation.json")
@@ -233,10 +234,16 @@ step "verify-docker-containers" {
                 
                       Write-Highlight "$packageItem successfully passed attestation verification"
                       Write-Verbose $attestation
+                      $artifactVerified = $true
                 
                       Write-Host "Writing the attest output to $packageName.$OctopusEnvironmentName.attestation.json"
                       New-Item -Name "$packageName.$OctopusEnvironmentName.attestation.json" -ItemType "File" -Value $attestation
                       New-OctopusArtifact -Path "$packageName.$OctopusEnvironmentName.attestation.json" -Name  "$packageName.$OctopusEnvironmentName.attestation.json"
+                    }
+                
+                    if ($artifactVerified -eq $false)
+                    {
+                      Write-Error "Unable to find a matching zip file for $packageItem to verifiy the attestation."
                     }
                   }
                 }

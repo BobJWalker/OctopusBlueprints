@@ -79,6 +79,7 @@ step "attach-sbom-to-release" {
                 
                 $objectArray = $objectToGetHash.Split("`n")
                 $buildUrl = $null
+                $vcsRoot = $null
                 foreach ($packageItem in $objectArray)
                 {
                   $artifactToCompare = $packageItem.Trim().Split(':')
@@ -90,6 +91,7 @@ step "attach-sbom-to-release" {
                     {
                       Write-Host "Versions match, getting the build URL"
                       $buildUrl = $package.BuildUrl
+                      $vcsRoot = $package.VcsRoot
                       Write-Host "The build url is $buildUrl"
                     }
                   }
@@ -101,6 +103,8 @@ step "attach-sbom-to-release" {
                 }
                 
                 $githubLessUrl = $buildUrl -Replace "https://github.com/", ""
+                $vcsRootGitHublessUrl = $vcsRoot -Replace "https://github.com/", ""
+                
                 $artifactUrl = "https://api.github.com/repos/$($githubLessUrl)/artifacts"
                 Write-Host "The artifact url is $artifactUrl"
                 
@@ -119,6 +123,16 @@ step "attach-sbom-to-release" {
                 
                 if ((test-path "artifact-sbom.zip") -eq $true)
                 {
+                  Write-Host "Verifying the attestation for artifact-sbom.zip from $vcsRootGitHublessUrl"
+                  $attestation=gh attestation verify "./artifact-sbom.zip" --repo $vcsRootGitHublessUrl --format json
+                
+                  Write-Highlight "The SBOM successfully passed attestation verification."
+                  Write-Verbose $attestation
+                
+                  Write-Host "Writing the attest output to sbom.$OctopusEnvironmentName.attestation.json"
+                  New-Item -Name "sbom.$OctopusEnvironmentName.attestation.json" -ItemType "File" -Value $attestation
+                  New-OctopusArtifact -Path "sbom.$OctopusEnvironmentName.attestation.json" -Name  "sbom.$OctopusEnvironmentName.attestation.json"
+                      
                   Expand-Archive -path "artifact-sbom.zip" -DestinationPath "./artifact-sbom"
                   $sbomFiles = Get-ChildItem -Path "./artifact-sbom" -Filter "*.json" -Recurse
                 
@@ -136,6 +150,11 @@ step "attach-sbom-to-release" {
             OctopusUseBundledTooling = "False"
         }
         worker_pool_variable = "#{Template.Verify.WorkerPool}"
+
+        container {
+            feed = "#{Template.Verify.ExecutionContainerFeed}"
+            image = "octopuslabs/github-workertools:latest"
+        }
     }
 }
 

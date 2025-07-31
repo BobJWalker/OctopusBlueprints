@@ -104,6 +104,7 @@ step "attach-sbom-to-release" {
                 
                 $githubLessUrl = $buildUrl -Replace "https://github.com/", ""
                 $vcsRootGitHublessUrl = $vcsRoot -Replace "https://github.com/", ""
+                $env:GITHUB_TOKEN = $gitHubToken
                 
                 $artifactUrl = "https://api.github.com/repos/$($githubLessUrl)/artifacts"
                 Write-Host "The artifact url is $artifactUrl"

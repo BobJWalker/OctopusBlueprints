@@ -201,7 +201,7 @@ step "verify-docker-containers" {
                       Write-Host "Attesting to $imageToAttest in the repo $githubLessUrl"
                       $attestation=gh attestation verify "$imageToAttest" --repo $githubLessUrl --format json 
                 
-                      Write-Host "The result of the attestation was $LASTEXITCODE"
+                      Write-Highlight "$packageItem successfully passed attestation verification"
                       Write-Verbose $attestation
                 
                       Write-Host "Writing the attest output to $packageName.$OctopusEnvironmentName.attestation.json"
@@ -226,7 +226,7 @@ step "verify-docker-containers" {
                       Write-Host "Attesting to $imageToAttest in the repo $githubLessUrl"
                       $attestation=gh attestation verify "$($file.FullName)" --repo $githubLessUrl --format json
                 
-                      Write-Host "The result of the attestation was $LASTEXITCODE"
+                      Write-Highlight "$packageItem successfully passed attestation verification"
                       Write-Verbose $attestation
                 
                       Write-Host "Writing the attest output to $packageName.$OctopusEnvironmentName.attestation.json"

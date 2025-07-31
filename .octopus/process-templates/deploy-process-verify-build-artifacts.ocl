@@ -180,7 +180,7 @@ step "verify-docker-containers" {
                   }
                 }
                 
-                if ($null -eq $vsRoot)
+                if ($null -eq $vcsRoot)
                 {
                   Write-Error "Unable to pull the build information URL from the Octopus Build information using supplied versions in $objectToGetHash.  Check that the build information has been supplied and try again."
                 }

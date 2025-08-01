@@ -56,14 +56,6 @@ parameter "Template.Approval.Environments" {
     label = "Approval Environment"
 }
 
-parameter "Template.Approval.Teams" {
-    display_settings = {
-        Octopus.ControlType = "Teams"
-    }
-    help_text = "**Required:** The DBA team that can approve the database deployment"
-    label = "Approval Team"
-}
-
 step "build-delta-report" {
     name = "Build Delta Report and check for auto approval"
 
@@ -175,7 +167,7 @@ step "notify-dbas" {
         properties = {
             Octopus.Action.Email.Body = "You can view the the deployment here: #{Octopus.Web.ServerUri}/app#/#{Octopus.Space.Id}/tasks/#{Octopus.Task.Id}."
             Octopus.Action.Email.Subject = "#{Octopus.Project.Name} #{Octopus.Release.Number} to #{Octopus.Environment.Name} has paused and is awaiting review."
-            Octopus.Action.Email.ToTeamIds = "#{Template.Approval.Teams}"
+            Octopus.Action.Email.ToTeamIds = "global/central-dbas"
         }
     }
 }
@@ -199,7 +191,7 @@ step "dbas-approve-delta-script" {
         properties = {
             Octopus.Action.Manual.BlockConcurrentDeployments = "True"
             Octopus.Action.Manual.Instructions = "Please review and verify the migration database report matches your expectations for a deployment."
-            Octopus.Action.Manual.ResponsibleTeamIds = "#{Template.Approval.Teams}"
+            Octopus.Action.Manual.ResponsibleTeamIds = "global/central-dbas"
         }
     }
 }

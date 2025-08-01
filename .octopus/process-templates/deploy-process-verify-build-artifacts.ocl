@@ -190,8 +190,6 @@ step "verify-docker-containers" {
                 
                 $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
-                $packagePath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageFilePath"]
-                $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].ExtractedPath"]
                 $packageVersion = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageVersion"]
                 $packageName = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageId"]
                 
@@ -199,6 +197,7 @@ step "verify-docker-containers" {
                 
                 $vcsRoot = $null
                 
+                Write-Host "Getting the repo name from build information"
                 foreach ($package in $buildInfoObject)
                 {
                   Write-Host "Comparing $($package.Version) with $($packageVersion)"
@@ -219,6 +218,7 @@ step "verify-docker-containers" {
                 
                 $env:GITHUB_TOKEN = $gitHubToken
                 
+                $objectArray = $objectToGetHash.Split("`n")
                 foreach($packageItem in $objectArray)
                 {    
                   $artifactToCompare = $packageItem.Trim().Split(':')

@@ -71,10 +71,15 @@ step "attach-sbom-to-release" {
                 
                 $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
-                $packagePath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageFilePath"]
+                $sbomPackagePath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageFilePath"]
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].ExtractedPath"]
                 $packageVersion = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageVersion"]
                 $packageName = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageId"]
+                
+                Write-Host "The SBOM package file path is $sbomPackagePath"
+                Write-Host "The SBOM extracted file path is $extractedPath"
+                Write-Host "The SBOM package version is $packageVersion"
+                Write-Host "The SBOM package name is $packageName"
                 
                 $buildInfoObject = ConvertFrom-Json $buildInformation
                 
@@ -87,8 +92,8 @@ step "attach-sbom-to-release" {
                   if ($packageVersion -eq $package.Version)
                   {
                     Write-Host "Versions match, getting the build URL"    
-                    $vcsRoot = $package.VcsRoot
-                    Write-Host "The build url is $vcsRoot"
+                    $vcsRoot = $($package.VcsRoot).ToLower()
+                    Write-Host "The VCS Root is $vcsRoot"
                 
                     break
                   }
@@ -102,12 +107,12 @@ step "attach-sbom-to-release" {
                 $vcsRootGitHublessUrl = $vcsRoot -Replace "https://github.com/", ""
                 $env:GITHUB_TOKEN = $gitHubToken
                 
-                Write-Host "Verifying the attestation for $packagePath from $vcsRootGitHublessUrl"
-                $attestation=gh attestation verify $packagePath --repo $vcsRootGitHublessUrl --format json
+                Write-Host "Verifying the attestation for $sbomPackagePath from $vcsRootGitHublessUrl"
+                $attestation=gh attestation verify $sbomPackagePath --repo $vcsRootGitHublessUrl --format json
                 
                 if ($LASTEXITCODE -ne 0)
                 {
-                  Write-Error "The attestation for $packagePath could not be verified"
+                  Write-Error "The attestation for $sbomPackagePath could not be verified"
                 }
                 
                 Write-Highlight "The SBOM successfully passed attestation verification."
@@ -287,6 +292,8 @@ step "verify-docker-containers" {
 
         packages "Template.SBOM.Artifact" {
             acquisition_location = "Server"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 Extract = "False"
                 PackageParameterName = "Template.SBOM.Artifact"

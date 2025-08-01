@@ -67,50 +67,47 @@ step "attach-sbom-to-release" {
         properties = {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                $objectToGetHash = $OctopusParameters["Template.Artifacts"]
                 $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
                 
                 $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 $packagePath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageFilePath"]
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].ExtractedPath"]
+                $packageVersion = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageVersion"]
+                $packageName = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageId"]
                 
                 $buildInfoObject = ConvertFrom-Json $buildInformation
                 
-                $objectArray = $objectToGetHash.Split("`n")
                 $buildUrl = $null
                 $vcsRoot = $null
-                foreach ($packageItem in $objectArray)
+                
+                foreach ($package in $buildInfoObject)
                 {
-                  $artifactToCompare = $packageItem.Trim().Split(':')
-                  Write-Host "The version to find in build information is $($artifactToCompare[1])"
-                  foreach ($package in $buildInfoObject)
+                  Write-Host "Comparing $($package.Version) with $($packageVersion)"
+                  if ($packageVersion -eq $package.Version)
                   {
-                    Write-Host "Comparing $($package.Version) with $($artifactToCompare[1])"
-                    if ($artifactToCompare[1] -eq $package.Version)
-                    {
-                      Write-Host "Versions match, getting the build URL"
-                      $buildUrl = $package.BuildUrl
-                      $vcsRoot = $package.VcsRoot
-                      Write-Host "The build url is $buildUrl"
-                    }
+                    Write-Host "Versions match, getting the build URL"    
+                    $vcsRoot = $package.VcsRoot
+                    Write-Host "The build url is $vcsRoot"
+                
+                    break
                   }
                 }
                 
-                if ($null -eq $buildUrl)
+                if ($null -eq $vcsRoot)
                 {
-                  Write-Error "Unable to pull the build information URL from the Octopus Build information using supplied versions in $objectToGetHash.  Check that the build information has been supplied and try again."
+                  Write-Error "Unable to pull the build information URL from the Octopus Build information using supplied versions in $packageName.  Check that the build information has been supplied and try again."
                 }
                 
                 $vcsRootGitHublessUrl = $vcsRoot -Replace "https://github.com/", ""
                 $env:GITHUB_TOKEN = $gitHubToken
                 
-                Write-Host "Verifying the attestation for artifact-sbom.zip from $vcsRootGitHublessUrl"
+                Write-Host "Verifying the attestation for $packagePath from $vcsRootGitHublessUrl"
                 $attestation=gh attestation verify $packagePath --repo $vcsRootGitHublessUrl --format json
                 
                 if ($LASTEXITCODE -ne 0)
                 {
-                  Write-Error "The attestation for artifact-sbom.zip could not be verified"
+                  Write-Error "The attestation for $packagePath could not be verified"
                 }
                 
                 Write-Highlight "The SBOM successfully passed attestation verification."
@@ -143,6 +140,8 @@ step "attach-sbom-to-release" {
 
         packages "Template.SBOM.Artifact" {
             acquisition_location = "Server"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 Extract = "True"
                 PackageParameterName = "Template.SBOM.Artifact"
@@ -173,30 +172,31 @@ step "verify-docker-containers" {
                 
                 $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
+                $packagePath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageFilePath"]
+                $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].ExtractedPath"]
+                $packageVersion = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageVersion"]
+                $packageName = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageId"]
                 
                 $buildInfoObject = ConvertFrom-Json $buildInformation
                 
-                $objectArray = $objectToGetHash.Split("`n")
                 $vcsRoot = $null
-                foreach ($packageItem in $objectArray)
+                
+                foreach ($package in $buildInfoObject)
                 {
-                  $artifactToCompare = $packageItem.Trim().Split(':')
-                  Write-Host "The version to find in build information is $($artifactToCompare[1])"
-                  foreach ($package in $buildInfoObject)
+                  Write-Host "Comparing $($package.Version) with $($packageVersion)"
+                  if ($packageVersion -eq $package.Version)
                   {
-                    Write-Host "Comparing $($package.Version) with $($artifactToCompare[1])"
-                    if ($artifactToCompare[1] -eq $package.Version)
-                    {
-                      Write-Host "Versions match, getting the build URL"
-                      $vcsRoot = $package.VcsRoot
-                      Write-Host "The vcsRoot is $vcsRoot"
-                    }
+                    Write-Host "Versions match, getting the build URL"    
+                    $vcsRoot = $package.VcsRoot
+                    Write-Host "The vcsRoot is $vcsRoot"
+                
+                    break
                   }
                 }
                 
                 if ($null -eq $vcsRoot)
                 {
-                  Write-Error "Unable to pull the build information URL from the Octopus Build information using supplied versions in $objectToGetHash.  Check that the build information has been supplied and try again."
+                  Write-Error "Unable to pull the build information URL from the Octopus Build information using supplied versions in $packageName.  Check that the build information has been supplied and try again."
                 }
                 
                 $githubLessUrl = $vcsRoot -Replace "https://github.com/", ""
@@ -283,6 +283,16 @@ step "verify-docker-containers" {
         container {
             feed = "#{Template.Verify.ExecutionContainerFeed}"
             image = "octopuslabs/github-workertools:latest"
+        }
+
+        packages "Template.SBOM.Artifact" {
+            acquisition_location = "Server"
+            properties = {
+                Extract = "False"
+                PackageParameterName = "Template.SBOM.Artifact"
+                Purpose = ""
+                SelectionMode = "deferred"
+            }
         }
     }
 }

@@ -67,73 +67,10 @@ step "attach-sbom-to-release" {
         properties = {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
-                
-                $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].ExtractedPath"]
-                $packageVersion = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageVersion"]
-                $packageName = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageId"]
                 
                 Write-Host "The SBOM extracted file path is $extractedPath"
-                Write-Host "The SBOM package version is $packageVersion"
-                Write-Host "The SBOM package name is $packageName"
-                
-                $buildInfoObject = ConvertFrom-Json $buildInformation
-                
-                $buildUrl = $null
-                $vcsRoot = $null
-                
-                foreach ($package in $buildInfoObject)
-                {
-                  Write-Host "Comparing $($package.Version) with $($packageVersion)"
-                  if ($packageVersion -eq $package.Version)
-                  {
-                    Write-Host "Versions match, getting the build URL"    
-                    $vcsRoot = $($package.VcsRoot).ToLower()
-                    Write-Host "The VCS Root is $vcsRoot"    
-                  }
-                }
-                
-                if ($null -eq $vcsRoot)
-                {
-                  Write-Error "Unable to pull the build information URL from the Octopus Build information using supplied versions in $packageName.  Check that the build information has been supplied and try again."
-                }
-                
-                if (Test-Path "/octopus/Files/")
-                {
-                   Write-Host "Pulling the raw package for $packageName.$packageVersion from /octopus/Files/"
-                   $zipFiles = Get-ChildItem -Path "/octopus/Files/" -Filter "*$($packageName)*$($packageVersion)@*.zip" -Recurse
-                }
-                else
-                {
-                   Write-Host "Pulling the raw package for $packageName.$packageVersion from /home/Octopus/Files"
-                   $zipFiles = Get-ChildItem -Path "/home/Octopus/Files" -Filter "*$($packageName)*$($packageVersion)@*.zip" -Recurse
-                }
-                
-                $sbomPackagePath = $null
-                foreach ($file in $zipFiles)
-                {
-                  $sbomPackagePath = $file.FullName
-                }
-                
-                $vcsRootGitHublessUrl = $vcsRoot -Replace "https://github.com/", ""
-                $env:GITHUB_TOKEN = $gitHubToken
-                
-                Write-Host "Verifying the attestation for $sbomPackagePath from $vcsRootGitHublessUrl"
-                $attestation=gh attestation verify $sbomPackagePath --repo $vcsRootGitHublessUrl --format json
-                
-                if ($LASTEXITCODE -ne 0)
-                {
-                  Write-Error "The attestation for $sbomPackagePath could not be verified"
-                }
-                
-                Write-Highlight "The SBOM successfully passed attestation verification."
-                Write-Verbose $attestation
-                
-                Write-Host "Writing the attest output to sbom.$OctopusEnvironmentName.attestation.json"
-                New-Item -Name "sbom.$OctopusEnvironmentName.attestation.json" -ItemType "File" -Value $attestation
-                New-OctopusArtifact -Path "sbom.$OctopusEnvironmentName.attestation.json" -Name  "sbom.$OctopusEnvironmentName.attestation.json"
                       
                 $sbomFiles = Get-ChildItem -Path $extractedPath -Filter "*.json" -Recurse
                 
@@ -191,7 +128,7 @@ step "verify-docker-containers" {
                 $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 $packageVersion = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageVersion"]
-                $packageName = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageId"]
+                $sbompackageName = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageId"]
                 
                 $buildInfoObject = ConvertFrom-Json $buildInformation
                 
@@ -218,6 +155,7 @@ step "verify-docker-containers" {
                 
                 $env:GITHUB_TOKEN = $gitHubToken
                 
+                $appendedObjectToGetHash = "$($objectToGetHash)`n$($sbompackageName):$($packageVersion)"
                 $objectArray = $objectToGetHash.Split("`n")
                 foreach($packageItem in $objectArray)
                 {    

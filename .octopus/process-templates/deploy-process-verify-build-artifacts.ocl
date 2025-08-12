@@ -70,7 +70,7 @@ step "attach-sbom-to-release" {
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].ExtractedPath"]
                 
-                Write-Host "The SBOM extracted file path is $extractedPath"
+                Write-Host "The SBOM extracted file path is this value $extractedPath"
                       
                 $sbomFiles = Get-ChildItem -Path $extractedPath -Filter "*.json" -Recurse
                 

@@ -1,0 +1,39 @@
+name = "Require Azure Key Vault"
+description = "Require the Azure Key Vault"
+ViolationReason = "Azure Key Vault step is required to deploy"
+
+scope {
+    rego = <<-EOT
+        package azurekeyvault
+
+		default evaluate := false
+
+		evaluate := true if startswith(input.Space.Name, "Default")
+        
+                
+    EOT
+}
+
+conditions {
+    rego = <<-EOT
+        package deploymentsteps
+
+        default result := {"allowed": false}
+
+        result := {"allowed": true} if {
+            some step in input.Steps
+            step.Slug == "azure-key-vault-retrieve-secrets"
+            not azure_key_vault_skipped
+        }
+
+        result := {"allowed": false, "Reason": "Azure Key Vault cannot be skipped"} if {
+            azure_key_vault_skipped
+        }
+
+        azure_key_vault_skipped if {
+            some step in input.Steps
+            step.Id in input.SkippedSteps
+            step.Slug == "azure-key-vault-retrieve-secrets"
+        }
+    EOT
+}

@@ -1,4 +1,4 @@
-name = "AzureKeyVaultRequired"
+name = "azurekeyvaultrequired"
 description = "Require the Azure Key Vault for deployments"
 ViolationReason = "Azure Key Vault step is required to deploy"
 
@@ -38,4 +38,5 @@ conditions {
     EOT
 
 }
+
 

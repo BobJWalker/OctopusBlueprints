@@ -1,16 +1,14 @@
-name = "azurekeyvaultrequired"
+name = "azure_key_vault_required"
 description = "Require the Azure Key Vault for deployments"
 ViolationReason = "Azure Key Vault step is required to deploy"
 
 scope {
     rego = <<-EOT
-        package azurekeyvaultrequired
+        package azure_key_vault_required
 
 		default evaluate := false
 
 		evaluate := true if startswith(input.Space.Name, "Default")
-        
-                
     EOT
 }
 
@@ -38,5 +36,6 @@ conditions {
     EOT
 
 }
+
 
 

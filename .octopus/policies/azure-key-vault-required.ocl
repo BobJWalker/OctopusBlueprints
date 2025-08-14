@@ -1,10 +1,10 @@
-name = "Require Azure Key Vault"
-description = "Require the Azure Key Vault"
+name = "Azure Key Vault Required"
+description = "Require the Azure Key Vault for deployments"
 ViolationReason = "Azure Key Vault step is required to deploy"
 
 scope {
     rego = <<-EOT
-        package azurekeyvault
+        package azurekeyvaultrequired
 
 		default evaluate := false
 
@@ -36,4 +36,5 @@ conditions {
             step.Slug == "azure-key-vault-retrieve-secrets"
         }
     EOT
+
 }

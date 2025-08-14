@@ -1,4 +1,4 @@
-name = "azure_key_vault_required"
+name = "Azure Key Vault Required"
 description = "Require the Azure Key Vault for deployments"
 ViolationReason = "Azure Key Vault step is required to deploy"
 
@@ -14,7 +14,7 @@ scope {
 
 conditions {
     rego = <<-EOT
-        package deploymentsteps
+        package azure_key_vault_required
 
         default result := {"allowed": false}
 
@@ -36,6 +36,7 @@ conditions {
     EOT
 
 }
+
 
 
 

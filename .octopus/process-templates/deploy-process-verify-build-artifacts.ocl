@@ -62,7 +62,7 @@ step "attach-sbom-to-release" {
         notes = <<-EOT
                 **Always Runs**
                 
-                Will pull the SBOM from the GitHub Release and attach it as a deployment artifact.
+                Will pull the SBOM from the package and attach it as a deployment artifact.
                 EOT
         properties = {
             Octopus.Action.RunOnServer = "true"

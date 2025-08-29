@@ -39,10 +39,5 @@ step "jcl" {
             OctopusUseBundledTooling = "False"
         }
         worker_pool_variable = "#{Frame.Worker.Pool}"
-
-        container {
-            feed = "#{Frame.Docker.Feed}"
-            image = "octopuslabs/azure-workertools:2.69.0"
-        }
     }
 }

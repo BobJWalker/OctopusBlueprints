@@ -1,2 +1,35 @@
 name = "Deploy Process - To the Frame"
 description = "A process template that deploys to mainframes"
+
+icon {
+    color = "#1A77CA"
+    id = "window-frame"
+}
+
+parameter "Frame.Worker.Pool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "The worker pool that will connect to the mainframe to orchestrate the deployment."
+    label = "Worker Pool"
+}
+
+step "jcl" {
+    name = "JCL"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                using System;
+                
+                WriteHighlight("Deploying to the mainframe!");
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "CSharp"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{Frame.Worker.Pool}"
+    }
+}

@@ -2,7 +2,7 @@ name = "Deploy Process - To the Frame"
 description = "A process template that deploys to mainframes"
 
 icon {
-    color = "#1A77CA"
+    color = "#557999"
     id = "window-frame"
 }
 
@@ -12,6 +12,14 @@ parameter "Frame.Worker.Pool" {
     }
     help_text = "The worker pool that will connect to the mainframe to orchestrate the deployment."
     label = "Worker Pool"
+}
+
+parameter "Frame.Docker.Feed" {
+    display_settings = {
+        Octopus.ControlType = "Feed"
+    }
+    help_text = ""
+    label = "Execution Container Feed"
 }
 
 step "jcl" {
@@ -31,5 +39,10 @@ step "jcl" {
             OctopusUseBundledTooling = "False"
         }
         worker_pool_variable = "#{Frame.Worker.Pool}"
+
+        container {
+            feed = "#{Frame.Docker.Feed}"
+            image = "octopuslabs/azure-workertools:2.69.0"
+        }
     }
 }

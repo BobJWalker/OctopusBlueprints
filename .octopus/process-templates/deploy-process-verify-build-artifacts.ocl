@@ -14,21 +14,6 @@ parameter "Template.SBOM.Artifact" {
     label = "SBOM Package"
 }
 
-parameter "Template.Artifacts" {
-    display_settings = {
-        Octopus.ControlType = "MultiLineText"
-    }
-    help_text = <<-EOT
-            The list of Docker containers or packages you want to verify haven't changed since the build server.  
-            
-            New line per item to verify.
-            
-            - For Docker containers use the format: `[owner]/[repo]:[version]`
-            - For packages use the format: `[packagename]:[version]`
-            EOT
-    label = "Artifacts to Verify"
-}
-
 parameter "Template.Git.AuthToken" {
     display_settings = {
         Octopus.ControlType = "SingleLineText"
@@ -122,27 +107,60 @@ step "verify-docker-containers" {
         properties = {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                $objectToGetHash = $OctopusParameters["Template.Artifacts"]
                 $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
                 
                 $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
-                $packageVersion = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageVersion"]
-                $sbompackageName = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].PackageId"]
+                
+                $objectArray = @()
+                foreach ($key in $OctopusParameters.Keys)
+                {
+                  if ($key -like "*.PackageId")
+                  {
+                    Write-Host "Found a package Id parameter: $key - checking to see if it already is in the packages to verify"
+                    
+                    $packageId = $OctopusParameters[$key]
+                    Write-Host "The package ID to check for is $packageId"
+                
+                    $packageVersionKey = $key -replace ".PackageId", ".PackageVersion"
+                    Write-Host "The package version key is $packageVersionKey"
+                    $packageVersion = $OctopusParameters[$packageVersionKey]
+                    Write-Host "The package version is $packageVersion"
+                
+                    $packageVersionToVerify = "$($packageId):$($packageVersion)"
+                
+                    if ($objectArray -contains "$packageVersionToVerify")
+                    {
+                      Write-Host "$packageVersionToVerify already exists in the array"
+                    }
+                    else
+                    {
+                      Write-Host "$packageVersionToVerify does not exist - adding it"
+                      $objectArray += $packageVersionToVerify
+                    }    
+                  }  
+                }
                 
                 $buildInfoObject = ConvertFrom-Json $buildInformation
-                
                 $vcsRoot = $null
                 
                 Write-Host "Getting the repo name from build information"
-                foreach ($package in $buildInfoObject)
+                foreach ($packageItem in $objectArray)
                 {
-                  Write-Host "Comparing $($package.Version) with $($packageVersion)"
-                  if ($packageVersion -eq $package.Version)
+                  $artifactToCompare = $packageItem.Trim().Split(':')
+                  $packageVersion = $artifactToCompare[1]
+                  
+                  Write-Host "The version to look for is: $packageVersion"
+                  
+                  foreach ($package in $buildInfoObject)
                   {
-                    Write-Host "Versions match, getting the build URL"    
-                    $vcsRoot = $package.VcsRoot
-                    Write-Host "The vcsRoot is $vcsRoot"    
+                    Write-Host "Comparing $($package.Version) with $($packageVersion)"
+                    if ($packageVersion -eq $package.Version)
+                    {
+                      Write-Host "Versions match, getting the build URL"    
+                      $vcsRoot = $package.VcsRoot
+                      Write-Host "The vcsRoot is $vcsRoot"    
+                    }
                   }
                 }
                 
@@ -155,10 +173,9 @@ step "verify-docker-containers" {
                 
                 $env:GITHUB_TOKEN = $gitHubToken
                 
-                $appendedObjectToGetHash = "$($objectToGetHash)`n$($sbompackageName):$($packageVersion)"
-                $objectArray = $appendedObjectToGetHash.Split("`n")
                 foreach($packageItem in $objectArray)
                 {    
+                  Write-Host "Verifying $packageItem"
                   $artifactToCompare = $packageItem.Trim().Split(':')
                   $packageName = $artifactToCompare[0].Replace("/", "")
                   
@@ -223,7 +240,7 @@ step "verify-docker-containers" {
                     {
                       Write-Error "Unable to find a matching zip file for $packageItem to verify the attestation."
                     }
-                  }
+                  }  
                 }
                 
                 
@@ -237,18 +254,6 @@ step "verify-docker-containers" {
         container {
             feed = "#{Template.Verify.ExecutionContainerFeed}"
             image = "octopuslabs/github-workertools:latest"
-        }
-
-        packages "Template.SBOM.Artifact" {
-            acquisition_location = "Server"
-            feed = "octopus-server-built-in"
-            package_id = ""
-            properties = {
-                Extract = "False"
-                PackageParameterName = "Template.SBOM.Artifact"
-                Purpose = ""
-                SelectionMode = "deferred"
-            }
         }
     }
 }

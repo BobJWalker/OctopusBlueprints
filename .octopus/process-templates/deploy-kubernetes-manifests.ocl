@@ -1,0 +1,2 @@
+name = "Deploy Kubernetes Manifests"
+description = "A process template that will deploy to a Kubernetes cluster using manifest files from a git repository."

@@ -79,7 +79,7 @@ step "deploy-container" {
         worker_pool_variable = "#{K8sTemplate.Worker.Pool}"
 
         git_dependencies {
-            default_branch = "#{Octopus.Release.Git.BranchName}"
+            default_branch = "main"
             file_path_filters = ["k8s/base/*secrets.yaml", "k8s/base/*deployment.yaml"]
             git_credential_id = "GitCredentialIds-1"
             git_credential_type = "Library"
@@ -120,7 +120,7 @@ step "verify-deployment" {
         worker_pool_variable = "#{K8sTemplate.Worker.Pool}"
 
         git_dependencies {
-            default_branch = "#{Octopus.Release.Git.BranchName}"
+            default_branch = "main"
             git_credential_id = "GitCredentialIds-1"
             git_credential_type = "Library"
             repository_uri = "#{K8sTemplate.Git.Repo}"

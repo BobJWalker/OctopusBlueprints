@@ -1,2 +1,91 @@
 name = "Deploy Kubernetes Manifests"
 description = "A process template that will deploy to a Kubernetes cluster using manifest files from a git repository."
+
+parameter "K8sTemplate.Target.Tag" {
+    display_settings = {
+        Octopus.ControlType = "TargetTags"
+    }
+    help_text = "The target tag of the Kubernetes cluster you wish to deploy the container to using a manifest file."
+    label = "Kubernetes Cluster Target Tag"
+}
+
+parameter "K8sTemplate.Git.Repo" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The git repository storing the manifest files to be used in the deployment."
+    label = "Manifest File Git Repo"
+}
+
+parameter "K8sTemplate.Container" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The container you wish to deploy to Kubernetes."
+    label = "Container to deploy"
+}
+
+parameter "K8sTemplate.Namespace" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The namespace you want to deploy to for this application."
+    label = "Kubernetes Namespace"
+}
+
+parameter "K8sTemplate.Worker.Pool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "The worker pool to use for deploying to Kubernetes.  This is where commands like `kubectl apply` will run."
+    label = "Worker Pool"
+}
+
+step "deploy-container" {
+    name = "Deploy Container"
+    properties = {
+        Octopus.Action.TargetRoles = "#{K8sTemplate.Target.Tag}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesDeployRawYaml"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Deploys the container to the Kubernetes Cluster using a manifest file.
+                EOT
+        properties = {
+            Octopus.Action.GitRepository.Source = "External"
+            Octopus.Action.Kubernetes.DeploymentTimeout = "180"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYamlFileName = <<-EOT
+                k8s/base/*secrets.yaml
+                k8s/base/*deployment.yaml
+                EOT
+            Octopus.Action.KubernetesContainers.Namespace = "#{K8sTemplate.Namespace}"
+            Octopus.Action.Package.JsonConfigurationVariablesTargets = "**/*.{yml,yaml}"
+            Octopus.Action.Script.ScriptSource = "GitRepository"
+        }
+        worker_pool_variable = "#{K8sTemplate.Worker.Pool}"
+
+        git_dependencies {
+            default_branch = "#{Octopus.Release.Git.BranchName}"
+            file_path_filters = ["k8s/base/*secrets.yaml", "k8s/base/*deployment.yaml"]
+            git_credential_id = "GitCredentialIds-1"
+            git_credential_type = "Library"
+            repository_uri = "#{K8sTemplate.Git.Repo}"
+        }
+
+        packages "K8sTemplate.Container" {
+            acquisition_location = "NotAcquired"
+            properties = {
+                Extract = "false"
+                PackageParameterName = "K8sTemplate.Container"
+                Purpose = "DockerImageReference"
+                SelectionMode = "deferred"
+            }
+        }
+    }
+}

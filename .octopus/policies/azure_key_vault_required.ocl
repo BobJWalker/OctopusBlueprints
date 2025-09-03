@@ -8,7 +8,7 @@ scope {
 
 		default evaluate := false
 
-		evaluate := true if startswith(input.Space.Name, "Default")
+		evaluate := true if startswith(input.Project.Name, "Trident")
     EOT
 }
 
@@ -36,6 +36,7 @@ conditions {
     EOT
 
 }
+
 
 
 

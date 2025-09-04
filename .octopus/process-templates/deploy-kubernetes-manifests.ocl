@@ -49,6 +49,14 @@ parameter "K8sTemplate.Worker.Pool" {
     label = "Worker Pool"
 }
 
+parameter "K8sTemplate.Branch.Name" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The name of the branch to pull the manifest and other associated files from."
+    label = "Branch Name"
+}
+
 step "deploy-container" {
     name = "Deploy Container"
     properties = {
@@ -79,7 +87,7 @@ step "deploy-container" {
         worker_pool_variable = "#{K8sTemplate.Worker.Pool}"
 
         git_dependencies {
-            default_branch = "main"
+            default_branch = "#{K8sTemplate.Branch.Name}"
             file_path_filters = ["k8s/base/*secrets.yaml", "k8s/base/*deployment.yaml"]
             git_credential_id = "GitCredentialIds-1"
             git_credential_type = "Library"
@@ -120,7 +128,7 @@ step "verify-deployment" {
         worker_pool_variable = "#{K8sTemplate.Worker.Pool}"
 
         git_dependencies {
-            default_branch = "main"
+            default_branch = "#{K8sTemplate.Branch.Name}"
             git_credential_id = "GitCredentialIds-1"
             git_credential_type = "Library"
             repository_uri = "#{K8sTemplate.Git.Repo}"

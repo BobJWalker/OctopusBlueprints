@@ -33,6 +33,14 @@ parameter "K8sTemplate.Namespace" {
     label = "Kubernetes Namespace"
 }
 
+parameter "K8sTemplate.Verification.Script.Path" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The relative path of the verification script that will run after the deployment is completed."
+    label = "Verification script path"
+}
+
 parameter "K8sTemplate.Worker.Pool" {
     display_settings = {
         Octopus.ControlType = "WorkerPool"
@@ -80,12 +88,42 @@ step "deploy-container" {
 
         packages "K8sTemplate.Container" {
             acquisition_location = "NotAcquired"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 Extract = "false"
                 PackageParameterName = "K8sTemplate.Container"
                 Purpose = "DockerImageReference"
                 SelectionMode = "deferred"
             }
+        }
+    }
+}
+
+step "verify-deployment" {
+    name = "Verify Deployment"
+
+    action {
+        action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Always runs**
+                
+                Runs a series of tests to ensure the deployment was successful.
+                EOT
+        properties = {
+            Octopus.Action.GitRepository.Source = "External"
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptFileName = "#{K8sTemplate.Verification.Script.Path}"
+            Octopus.Action.Script.ScriptSource = "GitRepository"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{K8sTemplate.Worker.Pool}"
+
+        git_dependencies {
+            default_branch = "main"
+            git_credential_id = "GitCredentialIds-1"
+            git_credential_type = "Library"
+            repository_uri = "#{K8sTemplate.Git.Repo}"
         }
     }
 }

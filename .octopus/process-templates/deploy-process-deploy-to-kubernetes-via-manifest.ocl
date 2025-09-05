@@ -2,7 +2,7 @@ name = "Deploy Process - Deploy to Kubernetes via manifest"
 description = "A process template that will deploy changes to Kubernetes using manifest files."
 
 icon {
-    color = "#1A77CA"
+    color = "#557999"
     id = "stream"
 }
 

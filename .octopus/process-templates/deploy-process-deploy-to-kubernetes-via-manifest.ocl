@@ -1,6 +1,11 @@
 name = "Deploy Process - Deploy to Kubernetes via manifest"
 description = "A process template that will deploy changes to Kubernetes using manifest files."
 
+icon {
+    color = "#1A77CA"
+    id = "stream"
+}
+
 parameter "K8sTemplate.Target.Tag" {
     display_settings = {
         Octopus.ControlType = "TargetTags"

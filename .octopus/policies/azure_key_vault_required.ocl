@@ -24,7 +24,7 @@ conditions {
             not azure_key_vault_skipped
         }
 
-        result := {"allowed": false, "Reason": "Azure Key Vault cannot be skipped"} if {
+        result := {"allowed": false, "Reason": "Azure Key Vault is required and cannot be skipped for a deployment or runbook run to any environment."} if {
             azure_key_vault_skipped
         }
 
@@ -36,6 +36,7 @@ conditions {
     EOT
 
 }
+
 
 
 

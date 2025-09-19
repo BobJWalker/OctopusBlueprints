@@ -62,9 +62,9 @@ step "attach-sbom-to-release" {
                 foreach ($sbom in $sbomFiles)
                 {
                   Write-Host "Attaching $($sbom.FullName) as an artifacts"
-                  New-OctopusArtifact -Path $sbom.FullName -Name "$OctopusEnvironmentName.SBOM.JSON"
+                  New-OctopusArtifact -Path $sbom.FullName -Name "$OctopusEnvironmentName.SBOM.JSON"  
                 
-                  break
+                  trivy sbom $sbom.FullName --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed
                 } 
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
@@ -75,7 +75,7 @@ step "attach-sbom-to-release" {
 
         container {
             feed = "#{Template.Verify.ExecutionContainerFeed}"
-            image = "octopuslabs/github-workertools:latest"
+            image = "octopuslabs/trivy-workertools:latest"
         }
 
         packages "Template.SBOM.Artifact" {

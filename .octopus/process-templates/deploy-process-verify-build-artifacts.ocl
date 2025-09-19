@@ -224,7 +224,7 @@ step "verify-docker-containers" {
                 
                       if ($LASTEXITCODE -ne 0)
                       {
-                         Write-Error "The attestation for $packageItem could not be verified"
+                         Write-Error "The attestation for $packageItem could not be verified - this means no attestation was generated or the package has been tampered with since it was created - stopping the deployment to avoid a security incident."
                       }
                 
                       Write-Highlight "$packageItem successfully passed attestation verification"
@@ -238,7 +238,7 @@ step "verify-docker-containers" {
                 
                     if ($artifactVerified -eq $false)
                     {
-                      Write-Error "Unable to find a matching zip file for $packageItem to verify the attestation."
+                      Write-Error "The attestation for $packageItem could not be verified - this means no attestation was generated or the package has been tampered with since it was created - stopping the deployment to avoid a security incident."
                     }
                   }  
                 }

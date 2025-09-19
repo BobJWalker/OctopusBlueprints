@@ -64,7 +64,7 @@ step "attach-sbom-to-release" {
                   Write-Host "Attaching $($sbom.FullName) as an artifacts"
                   New-OctopusArtifact -Path $sbom.FullName -Name "$OctopusEnvironmentName.SBOM.JSON"  
                 
-                  trivy sbom $sbom.FullName --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed
+                  trivy sbom $sbom.FullName --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet
                 } 
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"

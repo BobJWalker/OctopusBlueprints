@@ -212,11 +212,11 @@ step "verify-docker-containers" {
                       trivy image --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet $packageItem
                       if ($LASTEXITCODE -eq 0)
                       {
-                          Write-Highlight "Trivy successfully scanned $packageItem and no new vulnerabilities were found in the container or base containers."
+                          Write-Highlight "Trivy successfully scanned $packageItem and no new vulnerabilities have been found in the container or base containers since they were built."
                       }
                       else
                       {
-                         Write-Error "Trivy found vulnerabilities that must be fixed before this application version can proceed.  Please update the base container version and rebuild the application."
+                         Write-Error "Trivy found vulnerabilities in the build artifacts that must be fixed.  You can no longer deploy this release.  Please update the base container version, rebuild the application, and create a new release."
                       }
                   }
                   else

@@ -66,6 +66,15 @@ step "attach-sbom-to-release" {
                 
                   Write-Host "Running trivy to scan the SBOM for any new vulnerabilities since the build was run"
                   trivy sbom $sbom.FullName --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet
+                
+                  if ($LASTEXITCODE -eq 0)
+                  {
+                    Write-Highlight "Trivy successfully scanned the SBOM and no new vulnerabilities were found in the referenced third-party libraries."
+                  }
+                  else
+                  {
+                     Write-Error "Trivy found vulnerabilities that must be fixed before this application version can proceed.  Please update the package references and rebuild the application."
+                  }
                 } 
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
@@ -76,7 +85,7 @@ step "attach-sbom-to-release" {
 
         container {
             feed = "#{Template.Verify.ExecutionContainerFeed}"
-            image = "octopuslabs/trivy-workertools:latest"
+            image = "octopuslabs/github-workertools:latest"
         }
 
         packages "Template.SBOM.Artifact" {
@@ -198,6 +207,17 @@ step "verify-docker-containers" {
                       Write-Host "Writing the attest output to $packageName.$OctopusEnvironmentName.attestation.json"
                       New-Item -Name "$packageName.$OctopusEnvironmentName.attestation.json" -ItemType "File" -Value $attestation
                       New-OctopusArtifact -Path "$packageName.$OctopusEnvironmentName.attestation.json" -Name  "$packageName.$OctopusEnvironmentName.attestation.json"
+                
+                      Write-Host "Running trivy to check the container for any known vulnerabilities that might have been discovered since the build."      
+                      trivy container --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet $packageItem
+                      if ($LASTEXITCODE -eq 0)
+                      {
+                          Write-Highlight "Trivy successfully scanned $packageItem and no new vulnerabilities were found in the container or base containers."
+                      }
+                      else
+                      {
+                         Write-Error "Trivy found vulnerabilities that must be fixed before this application version can proceed.  Please update the base container version and rebuild the application."
+                      }
                   }
                   else
                   {    

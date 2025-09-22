@@ -85,7 +85,7 @@ step "attach-sbom-to-release" {
 
         container {
             feed = "#{Template.Verify.ExecutionContainerFeed}"
-            image = "octopuslabs/github-workertools:latest"
+            image = "octopuslabs/github-workertools:2.79.0"
         }
 
         packages "Template.SBOM.Artifact" {
@@ -274,7 +274,7 @@ step "verify-docker-containers" {
 
         container {
             feed = "#{Template.Verify.ExecutionContainerFeed}"
-            image = "octopuslabs/github-workertools:latest"
+            image = "octopuslabs/github-workertools:2.79.0"
         }
     }
 }

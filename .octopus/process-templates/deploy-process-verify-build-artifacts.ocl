@@ -209,7 +209,7 @@ step "verify-docker-containers" {
                       New-OctopusArtifact -Path "$packageName.$OctopusEnvironmentName.attestation.json" -Name  "$packageName.$OctopusEnvironmentName.attestation.json"
                 
                       Write-Host "Running trivy to check the container for any known vulnerabilities that might have been discovered since the build."      
-                      trivy container --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet $packageItem
+                      trivy image --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet $packageItem
                       if ($LASTEXITCODE -eq 0)
                       {
                           Write-Highlight "Trivy successfully scanned $packageItem and no new vulnerabilities were found in the container or base containers."

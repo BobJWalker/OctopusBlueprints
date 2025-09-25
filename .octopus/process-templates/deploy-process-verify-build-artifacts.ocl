@@ -38,8 +38,19 @@ parameter "Template.Verify.ExecutionContainerFeed" {
     label = "Verify Container Feed"
 }
 
+parameter "Template.Verify.TargetTag" {
+    display_settings = {
+        Octopus.ControlType = "TargetTags"
+    }
+    help_text = "The deployment target tag where the verification will run."
+    label = "Deployment Target Tag"
+}
+
 step "attach-sbom-to-release" {
     name = "Attach SBOM to Release"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.Verify.TargetTag}"
+    }
 
     action {
         action_type = "Octopus.Script"
@@ -50,9 +61,10 @@ step "attach-sbom-to-release" {
                 Will pull the SBOM from the package and attach it as a deployment artifact.
                 EOT
         properties = {
-            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
+                $OctopusDeviceName = $OctopusParameters["Octopus.Machine.Name"]
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].ExtractedPath"]
                 
                 Write-Host "The SBOM extracted file path is this value $extractedPath"
@@ -62,7 +74,7 @@ step "attach-sbom-to-release" {
                 foreach ($sbom in $sbomFiles)
                 {
                   Write-Host "Attaching $($sbom.FullName) as an artifacts"
-                  New-OctopusArtifact -Path $sbom.FullName -Name "$OctopusEnvironmentName.SBOM.JSON"  
+                  New-OctopusArtifact -Path $sbom.FullName -Name "$OctopusEnvironmentName.$OctopusDeviceName.SBOM.JSON"  
                 
                   Write-Host "Running trivy to scan the SBOM for any new vulnerabilities since the build was run"
                   trivy sbom $sbom.FullName --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet
@@ -81,12 +93,6 @@ step "attach-sbom-to-release" {
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
         }
-        worker_pool_variable = "#{Template.Verify.WorkerPool}"
-
-        container {
-            feed = "#{Template.Verify.ExecutionContainerFeed}"
-            image = "octopuslabs/github-workertools:2.79.0"
-        }
 
         packages "Template.SBOM.Artifact" {
             acquisition_location = "Server"
@@ -104,6 +110,9 @@ step "attach-sbom-to-release" {
 
 step "verify-docker-containers" {
     name = "Run Attestation Verification on Build Artifacts"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.Verify.TargetTag}"
+    }
     start_trigger = "StartWithPrevious"
 
     action {
@@ -115,12 +124,13 @@ step "verify-docker-containers" {
                 Will loop through the list of provided Docker containers and packages to verify their attestations using GitHub's CLI tooling.
                 EOT
         properties = {
-            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
                 
                 $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
+                $OctopusDeviceName = $OctopusParameters["Octopus.Machine.Name"]
                 
                 $objectArray = @()
                 foreach ($key in $OctopusParameters.Keys)
@@ -206,7 +216,7 @@ step "verify-docker-containers" {
                 
                       Write-Host "Writing the attest output to $packageName.$OctopusEnvironmentName.attestation.json"
                       New-Item -Name "$packageName.$OctopusEnvironmentName.attestation.json" -ItemType "File" -Value $attestation
-                      New-OctopusArtifact -Path "$packageName.$OctopusEnvironmentName.attestation.json" -Name  "$packageName.$OctopusEnvironmentName.attestation.json"
+                      New-OctopusArtifact -Path "$packageName.$OctopusEnvironmentName.attestation.json" -Name  "$packageName.$OctopusEnvironmentName.$OctopusDeviceName.attestation.json"
                 
                       Write-Host "Running trivy to check the container for any known vulnerabilities that might have been discovered since the build."      
                       trivy image --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet $packageItem
@@ -269,12 +279,6 @@ step "verify-docker-containers" {
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"
-        }
-        worker_pool_variable = "#{Template.Verify.WorkerPool}"
-
-        container {
-            feed = "#{Template.Verify.ExecutionContainerFeed}"
-            image = "octopuslabs/github-workertools:2.79.0"
         }
     }
 }

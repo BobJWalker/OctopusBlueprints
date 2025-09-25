@@ -25,7 +25,7 @@ parameter "Template.Kubernetes.TargetTags" {
 step "create-application-namespace" {
     name = "Create Application Namespace"
     properties = {
-        Octopus.Action.TargetRoles = "template"
+        Octopus.Action.TargetRoles = "#{Template.Kubernetes.TargetTags}"
     }
 
     action {

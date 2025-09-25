@@ -25,7 +25,7 @@ parameter "Template.Kubernetes.TargetTags" {
 step "delete-kubernetes-namespace" {
     name = "Delete Kubernetes Namespace"
     properties = {
-        Octopus.Action.TargetRoles = "template"
+        Octopus.Action.TargetRoles = "#{Template.Kubernetes.TargetTags}"
     }
 
     action {

@@ -1,6 +1,6 @@
 name = "Verify Build Artifacts Required"
 description = "Requires the process template Deploy Process - Verify Build Artifacts for all deployments"
-ViolationReason = "Deploy Process - Verify Build Artifacts"
+ViolationReason = "Deploy Process - Verify Build Artifacts is required on all deployments to K8s"
 
 scope {
     rego = <<-EOT
@@ -9,7 +9,7 @@ scope {
 		default evaluate := false
 
 		evaluate := true if {
-            input.ProjectGroup.Name == "Kubernetes"            
+            input.ProjectGroup.Slug == "kubernetes"            
         }
     EOT
 }
@@ -26,7 +26,7 @@ conditions {
             not verify_build_artifacts_skipped
         }
 
-        result := {"allowed": false, "Reason": "The process template Deploy Process - Verify Build Artifacts is required and cannot be skipped for a deployment to any environment."} if {
+        result := {"allowed": false, "Reason": "The process template Deploy Process - Verify Build Artifacts is required and cannot be skipped for a deployment to K8s to any environment."} if {
             verify_build_artifacts_skipped
         }
 

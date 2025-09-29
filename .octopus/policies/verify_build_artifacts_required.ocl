@@ -24,7 +24,7 @@ conditions {
         result := {"allowed": true} if {
             some step in input.Steps
             step.Source.SlugOrId == "deploy-process-verify-build-artifacts" 
-            step.Enable == true           
+            step.Enabled == true           
             not verify_build_artifacts_skipped
         }
 

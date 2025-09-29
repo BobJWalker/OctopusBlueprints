@@ -4,28 +4,25 @@ ViolationReason = "Deploy Process - Verify Build Artifacts"
 
 scope {
     rego = <<-EOT
-        package deploy_verify_build_artifacts_required
+        package verify_build_artifacts_required
 
 		default evaluate := false
 
-		evaluate := true if 
-        {
-            input.ProjectGroup.Name == "Kubernetes"
-            not input.Runbook
+		evaluate := true if {
+            input.ProjectGroup.Name == "Kubernetes"            
         }
     EOT
 }
 
 conditions {
     rego = <<-EOT
-        package deploy_verify_build_artifacts_required
+        package verify_build_artifacts_required
 
         default result := {"allowed": false}
 
         result := {"allowed": true} if {
             some step in input.Steps
-            step.Source.SlugOrId == "deploy-process-verify-build-artifacts"
-            step.Enabled == true
+            step.Source.SlugOrId == "deploy-process-verify-build-artifacts"            
             not verify_build_artifacts_skipped
         }
 

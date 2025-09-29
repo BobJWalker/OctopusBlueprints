@@ -9,7 +9,8 @@ scope {
 		default evaluate := false
 
 		evaluate := true if {
-            input.ProjectGroup.Slug == "kubernetes"            
+            input.ProjectGroup.Slug == "kubernetes" 
+            not input.Runbook           
         }
     EOT
 }
@@ -22,7 +23,8 @@ conditions {
 
         result := {"allowed": true} if {
             some step in input.Steps
-            step.Source.SlugOrId == "deploy-process-verify-build-artifacts"            
+            step.Source.SlugOrId == "deploy-process-verify-build-artifacts" 
+            step.Enable == true           
             not verify_build_artifacts_skipped
         }
 

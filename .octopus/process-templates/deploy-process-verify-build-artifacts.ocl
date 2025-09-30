@@ -47,7 +47,7 @@ step "attach-sbom-to-release" {
         notes = <<-EOT
                 **Always Runs**
                 
-                Will pull the SBOM from the package and attach it as a deployment artifact.
+                Will pull the SBOM from the package and attach it as a deployment artifact.  After, it will scan the SBOM for any known fixed third-party vulnerabilities.
                 EOT
         properties = {
             Octopus.Action.RunOnServer = "true"
@@ -112,7 +112,7 @@ step "verify-docker-containers" {
         notes = <<-EOT
                 **Always Runs**
                 
-                Will loop through the list of provided Docker containers and packages to verify their attestations using GitHub's CLI tooling.
+                This step loops through the list of Docker containers and packages to verify their attestations using GitHub's CLI tooling. If a container is found, it scans it for any known fixed third-party vulnerabilities.
                 EOT
         properties = {
             Octopus.Action.RunOnServer = "true"

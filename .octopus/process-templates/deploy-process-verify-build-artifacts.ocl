@@ -51,6 +51,8 @@ step "get-packages-and-build-information" {
         properties = {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
+                $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
+                
                 $objectArray = @()
                 foreach ($key in $OctopusParameters.Keys)
                 {

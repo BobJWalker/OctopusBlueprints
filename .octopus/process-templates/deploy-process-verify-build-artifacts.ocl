@@ -38,6 +38,111 @@ parameter "Template.Verify.ExecutionContainerFeed" {
     label = "Verify Container Feed"
 }
 
+step "get-packages-and-build-information" {
+    name = "Get Packages and Build Information"
+
+    action {
+        action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Pulls the package and build information for the deployment so it can be used later for vulnerability scanning and attestation verification
+                EOT
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $objectArray = @()
+                foreach ($key in $OctopusParameters.Keys)
+                {
+                  if ($key -like "*.PackageId")
+                  {
+                    Write-Host "Found a package Id parameter: $key - checking to see if it already is in the packages to verify"
+                    
+                    $packageId = $OctopusParameters[$key]
+                    Write-Host "The package ID to check for is $packageId"
+                
+                    $packageVersionKey = $key -replace ".PackageId", ".PackageVersion"
+                    Write-Host "The package version key is $packageVersionKey"
+                    $packageVersion = $OctopusParameters[$packageVersionKey]
+                    Write-Host "The package version is $packageVersion"
+                
+                    $packageVersionToVerify = "$($packageId):$($packageVersion)"
+                
+                    if ($objectArray -contains "$packageVersionToVerify")
+                    {
+                      Write-Host "$packageVersionToVerify already exists in the array"
+                    }
+                    else
+                    {
+                      Write-Host "$packageVersionToVerify does not exist - adding it"
+                      $objectArray += $packageVersionToVerify
+                    }    
+                  }  
+                }
+                
+                $buildInfoObject = ConvertFrom-Json $buildInformation
+                $vcsRoot = $null
+                $prMergeHash = $null
+                
+                Write-Host "Getting the repo name from build information"
+                foreach ($packageItem in $objectArray)
+                {
+                  $artifactToCompare = $packageItem.Trim().Split(':')
+                  $packageVersion = $artifactToCompare[1]
+                  
+                  Write-Host "The version to look for is: $packageVersion"
+                  
+                  foreach ($package in $buildInfoObject)
+                  {
+                    Write-Host "Comparing $($package.Version) with $($packageVersion)"
+                    if ($packageVersion -ne $package.Version)
+                    {
+                      Write-Host "The versions do not match, moving onto the next item."
+                      continue
+                    }
+                    
+                    Write-Host "Versions match, getting the build URL"    
+                    $vcsRoot = $package.VcsRoot
+                    Write-Host "The vcsRoot is $vcsRoot"        
+                
+                    $lastCommit = $package.Commits | Select-Object -Last 1
+                    $prMergeHash = $lastCommit.Id
+                  }
+                }
+                
+                if ($null -eq $vcsRoot)
+                {
+                  Write-Error "Unable to pull the build information URL from the Octopus Build information.  Check that the build information has been supplied and try again."
+                }
+                
+                $objectArrayAsString = ConvertTo-JSON $objectArray
+                Write-Host "Adding the output variable PackagesToVerify with the value $objectArrayAsString"
+                Set-OctopusVariable -name "PackagesToVerify" -value $objectArrayAsString
+                
+                $githubLessUrl = $vcsRoot -Replace "https://github.com/", ""
+                Write-Host "Adding the output variable GitHubRepoName with the value $githubLessUrl"
+                Set-OctopusVariable -name "GitHubRepoName" -value $githubLessUrl
+                
+                if ($null -ne $prMergeHash)
+                {
+                  Write-Host "Adding the output variable LastGitCommitHash with the value $prMergeHash"
+                  Set-OctopusVariable -name "LastGitCommitHash" -value $prMergeHash
+                }
+                
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{Template.Verify.WorkerPool}"
+
+        container {
+            feed = "#{Template.Verify.ExecutionContainerFeed}"
+            image = "octopuslabs/github-workertools:2.79.0"
+        }
+    }
+}
+
 step "attach-sbom-to-release" {
     name = "Attach SBOM to Release"
 

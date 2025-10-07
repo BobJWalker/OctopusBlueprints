@@ -352,7 +352,7 @@ step "check-github-for-open-vulnerabilities" {
                   param (
                     $Token,
                     $Repo,
-                    $IsDependabot,    
+                    $IsDependabot    
                   )
                 
                   $Headers = @{

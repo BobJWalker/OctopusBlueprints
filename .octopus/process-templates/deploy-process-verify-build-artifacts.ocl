@@ -412,16 +412,16 @@ step "check-github-for-open-vulnerabilities" {
                     
                   }
                   else {
-                    Write-Error "⚠️ Found $($AllAlerts.Count) open alerts (Critical/High/Medium)"
-                    Write-Host "⚠️ Found $($AllAlerts.Count) open alerts (Critical/High/Medium): \n"
-                    $AllAlerts | Select-Object `
-                        number, `
-                        state, `
-                        @{Name="Severity";Expression={$_.security_advisory.severity}}, `
-                        @{Name="Dependency";Expression={$_.dependency.package.name}}, `
-                        @{Name="Manifest";Expression={$_.dependency.manifest_path}}, `
-                        created_at `
-                    | Format-Table -AutoSize
+                    if ($IsDependabot)
+                    {
+                      Write-Highlight "⚠️ Found $($AllAlerts.Count) open GitHub Dependabot alerts (Critical/High/Medium)."
+                    }
+                    else
+                    {
+                      Write-Highlight "⚠️ Found $($AllAlerts.Count) open GitHub Code Scanning alerts (Critical/High/Medium)."
+                    }    
+                    
+                    Write-Error "Unable to proceeed as open alerts in GitHub were found."    
                   }
                 }
                 

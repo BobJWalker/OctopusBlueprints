@@ -398,22 +398,22 @@ step "check-github-for-open-vulnerabilities" {
                   if (-not $AllAlerts -or $AllAlerts.Count -eq 0) {
                     if ($IsDependabot)
                     {
-                      Write-Highlight "✅ No open Dependabot alerts found with severity Critical, High, or Medium."
+                      Write-Highlight "✅ No open GitHub Dependabot alerts found with Critical or High severity."
                     }
                     else
                     {
-                      Write-Highlight "✅ No open Code Scanning alerts found with severity Critical, High, or Medium."
+                      Write-Highlight "✅ No open GitHub Code Scanning alerts found with Critical or High severity."
                     }
                     
                   }
                   else {
                     if ($IsDependabot)
                     {
-                      Write-Highlight "⚠️ Found $($AllAlerts.Count) open GitHub Dependabot alerts (Critical/High/Medium)."
+                      Write-Highlight "⚠️ Found $($AllAlerts.Count) open [GitHub Dependabot alerts](https://github.com/$repo/security/dependabot) with Critical or High severity."
                     }
                     else
                     {
-                      Write-Highlight "⚠️ Found $($AllAlerts.Count) open GitHub Code Scanning alerts (Critical/High/Medium)."
+                      Write-Highlight "⚠️ Found $($AllAlerts.Count) open [GitHub Code Scanning alerts](https://github.com/$repo/security/code-scanning) with Critical or High severity."
                     }    
                     
                     Write-Error "Unable to proceed as open alerts in GitHub were found."    

@@ -43,6 +43,7 @@ step "get-packages-and-build-information" {
 
     action {
         action_type = "Octopus.Script"
+        is_required = true
         notes = <<-EOT
                 **Always Runs**
                 
@@ -146,7 +147,7 @@ step "get-packages-and-build-information" {
 }
 
 step "attach-sbom-to-release" {
-    name = "Attach SBOM to Release"
+    name = "Attach SBOM and Check for Open Vulnerabilities"
 
     action {
         action_type = "Octopus.Script"
@@ -176,11 +177,11 @@ step "attach-sbom-to-release" {
                 
                   if ($LASTEXITCODE -eq 0)
                   {
-                    Write-Highlight "Trivy successfully scanned the SBOM and no new vulnerabilities were found in the referenced third-party libraries."
+                    Write-Highlight "✅ Successfully scanned the SBOM and no new vulnerabilities were found in the referenced third-party libraries."
                   }
                   else
                   {
-                     Write-Error "Trivy found vulnerabilities that must be fixed before this application version can proceed.  Please update the package references and rebuild the application."
+                     Write-Error "⚠️ Vulnerabilities found that must be fixed.  Please update the package references and rebuild the application."
                   }
                 } 
                 EOT
@@ -224,70 +225,15 @@ step "verify-docker-containers" {
         properties = {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
-                
                 $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 
-                $objectArray = @()
-                foreach ($key in $OctopusParameters.Keys)
-                {
-                  if ($key -like "*.PackageId")
-                  {
-                    Write-Host "Found a package Id parameter: $key - checking to see if it already is in the packages to verify"
-                    
-                    $packageId = $OctopusParameters[$key]
-                    Write-Host "The package ID to check for is $packageId"
+                $objectArrayRaw = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.PackagesToVerify"]
+                $objectArray = ConvertFrom-Json $ObjectArrayRaw
                 
-                    $packageVersionKey = $key -replace ".PackageId", ".PackageVersion"
-                    Write-Host "The package version key is $packageVersionKey"
-                    $packageVersion = $OctopusParameters[$packageVersionKey]
-                    Write-Host "The package version is $packageVersion"
+                $githubLessUrl = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.GitHubRepoName"]
                 
-                    $packageVersionToVerify = "$($packageId):$($packageVersion)"
-                
-                    if ($objectArray -contains "$packageVersionToVerify")
-                    {
-                      Write-Host "$packageVersionToVerify already exists in the array"
-                    }
-                    else
-                    {
-                      Write-Host "$packageVersionToVerify does not exist - adding it"
-                      $objectArray += $packageVersionToVerify
-                    }    
-                  }  
-                }
-                
-                $buildInfoObject = ConvertFrom-Json $buildInformation
-                $vcsRoot = $null
-                
-                Write-Host "Getting the repo name from build information"
-                foreach ($packageItem in $objectArray)
-                {
-                  $artifactToCompare = $packageItem.Trim().Split(':')
-                  $packageVersion = $artifactToCompare[1]
-                  
-                  Write-Host "The version to look for is: $packageVersion"
-                  
-                  foreach ($package in $buildInfoObject)
-                  {
-                    Write-Host "Comparing $($package.Version) with $($packageVersion)"
-                    if ($packageVersion -eq $package.Version)
-                    {
-                      Write-Host "Versions match, getting the build URL"    
-                      $vcsRoot = $package.VcsRoot
-                      Write-Host "The vcsRoot is $vcsRoot"    
-                    }
-                  }
-                }
-                
-                if ($null -eq $vcsRoot)
-                {
-                  Write-Error "Unable to pull the build information URL from the Octopus Build information using supplied versions in $packageName.  Check that the build information has been supplied and try again."
-                }
-                
-                $githubLessUrl = $vcsRoot -Replace "https://github.com/", ""
-                
+                $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
                 $env:GITHUB_TOKEN = $gitHubToken
                 
                 foreach($packageItem in $objectArray)
@@ -319,11 +265,11 @@ step "verify-docker-containers" {
                       trivy image --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet $packageItem
                       if ($LASTEXITCODE -eq 0)
                       {
-                          Write-Highlight "Trivy successfully scanned $packageItem and no new vulnerabilities have been found in the container or base containers since they were built."
+                          Write-Highlight "✅ Successfully verified $packageItem has no new fixed vulnerabilities have been found."
                       }
                       else
                       {
-                         Write-Error "Trivy found vulnerabilities in the build artifacts that must be fixed.  You can no longer deploy this release.  Please update the base container version, rebuild the application, and create a new release."
+                         Write-Error "⚠️ Fixable vulnerabilities found in the build artifacts that must be fixed.  You can no longer deploy this release.  Please update the base container version, rebuild the application, and create a new release."
                       }
                   }
                   else
@@ -372,6 +318,85 @@ step "verify-docker-containers" {
                 }
                 
                 
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{Template.Verify.WorkerPool}"
+
+        container {
+            feed = "#{Template.Verify.ExecutionContainerFeed}"
+            image = "octopuslabs/github-workertools:2.79.0"
+        }
+    }
+}
+
+step "check-github-for-open-vulnerabilities" {
+    name = "Check GitHub for Open Vulnerabilities"
+    start_trigger = "StartWithPrevious"
+
+    action {
+        action_type = "Octopus.Script"
+        is_required = true
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $githubLessUrl = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.GitHubRepoName"]
+                $commit = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.LastGitCommitHash"]
+                
+                $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
+                $Headers = @{
+                    "Authorization" = "Bearer $GitHubToken"
+                    "Accept"        = "application/vnd.github+json"
+                }
+                
+                # Collect all alerts
+                $AllAlerts = @()
+                $Page = 1
+                $PerPage = 100
+                
+                do {
+                    # Build API URL with severity filter
+                    $Url = "https://api.github.com/repos/$githubLessUrl/dependabot/alerts?state=open&severity=critical&severity=high&severity=moderateper_page=$PerPage&page=$Page"
+                    
+                    if ($Commit) {
+                        $Url += "&commit=$Commit"
+                    }
+                
+                    Write-Host "Fetching page $Page of Dependabot alerts for $Owner/$Repo for the commit"
+                    if ($Commit) { Write-Host "Filtering by commit: $Commit" }
+                
+                    try {
+                        Write-Host "Invoking $url to get open alerts"
+                        $Response = Invoke-RestMethod -Uri $Url -Headers $Headers -Method Get
+                    }
+                    catch {
+                        Write-Error "Error fetching alerts from page $Page: $_"
+                        break
+                    }
+                
+                    if ($Response) {
+                        $AllAlerts += $Response
+                        $Page++
+                    }
+                } while ($Response.Count -eq $PerPage)  # continue if full page returned
+                
+                if (-not $AllAlerts -or $AllAlerts.Count -eq 0) {
+                    Write-Highlight "✅ No open Dependabot alerts found with severity Critical, High, or Moderate."
+                }
+                else {
+                    Write-Error "⚠️ Found $($AllAlerts.Count) open Dependabot alerts (Critical/High/Moderate)"
+                    Write-Host "⚠️ Found $($AllAlerts.Count) open Dependabot alerts (Critical/High/Moderate): \n"
+                    $AllAlerts | Select-Object `
+                        number, `
+                        state, `
+                        @{Name="Severity";Expression={$_.security_advisory.severity}}, `
+                        @{Name="Dependency";Expression={$_.dependency.package.name}}, `
+                        @{Name="Manifest";Expression={$_.dependency.manifest_path}}, `
+                        created_at `
+                    | Format-Table -AutoSize
+                }
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"

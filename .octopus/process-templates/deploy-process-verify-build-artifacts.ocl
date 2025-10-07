@@ -347,24 +347,43 @@ step "check-github-for-open-vulnerabilities" {
         properties = {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
-                $githubLessUrl = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.GitHubRepoName"]
+                function Invoke-GitHubPagedUrl
+                {
+                  param (
+                    $Token,
+                    $Repo,
+                    $IsDependabot,
+                    $Commit
+                  )
                 
-                $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
-                $Headers = @{
-                    "Authorization" = "Bearer $GitHubToken"
+                  $Headers = @{
+                    "Authorization" = "Bearer $Token"
                     "Accept"        = "application/vnd.github+json"
-                }
+                  }
                 
-                # Collect all alerts
-                $AllAlerts = @()
-                $Page = 1
-                $PerPage = 100
+                  # Collect all alerts
+                  $AllAlerts = @()
+                  $Page = 1
+                  $PerPage = 100
                 
-                do {
+                  do {
                     # Build API URL with severity filter
-                    $Url = "https://api.github.com/repos/$githubLessUrl/dependabot/alerts?state=open&severity=critical&severity=high&severity=medium&per_page=$PerPage&page=$Page"  
+                    $Url = "https://api.github.com/repos/$repo"
                 
-                    Write-Host "Fetching page $Page of Dependabot alerts for $Owner/$Repo for the commit"
+                    if ($IsDependabot) {
+                      $Url += "/dependabot"
+                    }
+                    else {
+                      $Url += "/code-scanning"
+                    }
+                    
+                    $Url += "/alerts?state=open&severity=critical&severity=high&severity=medium&per_page=$PerPage&page=$Page" 
+                    if ($Commit) {
+                        $Url += "&ref=$Commit"
+                    }
+                
+                    Write-Host "Fetching page $Page of code scanning alerts for $Owner/$Repo ..."
+                    if ($Commit) { Write-Host "Filtering by commit: $Commit" }
                 
                     try {
                         Write-Host "Invoking $url to get open alerts"
@@ -379,12 +398,12 @@ step "check-github-for-open-vulnerabilities" {
                         $AllAlerts += $Response
                         $Page++
                     }
-                } while ($Response.Count -eq $PerPage)  # continue if full page returned
+                  } while ($Response.Count -eq $PerPage)  # continue if full page returned
                 
-                if (-not $AllAlerts -or $AllAlerts.Count -eq 0) {
+                  if (-not $AllAlerts -or $AllAlerts.Count -eq 0) {
                     Write-Highlight "✅ No open Dependabot alerts found with severity Critical, High, or Medium."
-                }
-                else {
+                  }
+                  else {
                     Write-Error "⚠️ Found $($AllAlerts.Count) open Dependabot alerts (Critical/High/Medium)"
                     Write-Host "⚠️ Found $($AllAlerts.Count) open Dependabot alerts (Critical/High/Medium): \n"
                     $AllAlerts | Select-Object `
@@ -395,7 +414,17 @@ step "check-github-for-open-vulnerabilities" {
                         @{Name="Manifest";Expression={$_.dependency.manifest_path}}, `
                         created_at `
                     | Format-Table -AutoSize
+                  }
                 }
+                
+                $githubLessUrl = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.GitHubRepoName"]
+                $commitHash = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.LastGitCommitHash"]
+                $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
+                
+                Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $true -Commit $null
+                Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $false -Commit $commitHash
+                
+                
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"

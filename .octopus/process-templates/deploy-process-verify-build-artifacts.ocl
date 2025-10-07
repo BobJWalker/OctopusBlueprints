@@ -401,11 +401,19 @@ step "check-github-for-open-vulnerabilities" {
                   } while ($Response.Count -eq $PerPage)  # continue if full page returned
                 
                   if (-not $AllAlerts -or $AllAlerts.Count -eq 0) {
-                    Write-Highlight "✅ No open Dependabot alerts found with severity Critical, High, or Medium."
+                    if ($IsDependabot)
+                    {
+                      Write-Highlight "✅ No open Dependabot alerts found with severity Critical, High, or Medium."
+                    }
+                    else
+                    {
+                      Write-Highlight "✅ No open Code Scanning alerts found with severity Critical, High, or Medium."
+                    }
+                    
                   }
                   else {
-                    Write-Error "⚠️ Found $($AllAlerts.Count) open Dependabot alerts (Critical/High/Medium)"
-                    Write-Host "⚠️ Found $($AllAlerts.Count) open Dependabot alerts (Critical/High/Medium): \n"
+                    Write-Error "⚠️ Found $($AllAlerts.Count) open alerts (Critical/High/Medium)"
+                    Write-Host "⚠️ Found $($AllAlerts.Count) open alerts (Critical/High/Medium): \n"
                     $AllAlerts | Select-Object `
                         number, `
                         state, `
@@ -422,7 +430,7 @@ step "check-github-for-open-vulnerabilities" {
                 $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
                 
                 Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $true -Commit $null
-                Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $false -Commit $commitHash
+                Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $false -Commit $null
                 
                 
                 EOT

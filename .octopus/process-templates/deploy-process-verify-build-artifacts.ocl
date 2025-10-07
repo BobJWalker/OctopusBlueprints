@@ -348,7 +348,6 @@ step "check-github-for-open-vulnerabilities" {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $githubLessUrl = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.GitHubRepoName"]
-                $commit = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.LastGitCommitHash"]
                 
                 $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
                 $Headers = @{
@@ -363,14 +362,9 @@ step "check-github-for-open-vulnerabilities" {
                 
                 do {
                     # Build API URL with severity filter
-                    $Url = "https://api.github.com/repos/$githubLessUrl/dependabot/alerts?state=open&severity=critical&severity=high&severity=medium&per_page=$PerPage&page=$Page"
-                    
-                    if ($Commit) {
-                        $Url += "&commit=$Commit"
-                    }
+                    $Url = "https://api.github.com/repos/$githubLessUrl/dependabot/alerts?state=open&severity=critical&severity=high&severity=medium&per_page=$PerPage&page=$Page"  
                 
                     Write-Host "Fetching page $Page of Dependabot alerts for $Owner/$Repo for the commit"
-                    if ($Commit) { Write-Host "Filtering by commit: $Commit" }
                 
                     try {
                         Write-Host "Invoking $url to get open alerts"

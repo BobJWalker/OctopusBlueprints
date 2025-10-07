@@ -363,7 +363,7 @@ step "check-github-for-open-vulnerabilities" {
                 
                 do {
                     # Build API URL with severity filter
-                    $Url = "https://api.github.com/repos/$githubLessUrl/dependabot/alerts?state=open&severity=critical&severity=high&severity=moderate&per_page=$PerPage&page=$Page"
+                    $Url = "https://api.github.com/repos/$githubLessUrl/dependabot/alerts?state=open&severity=critical&severity=high&severity=medium&per_page=$PerPage&page=$Page"
                     
                     if ($Commit) {
                         $Url += "&commit=$Commit"
@@ -388,11 +388,11 @@ step "check-github-for-open-vulnerabilities" {
                 } while ($Response.Count -eq $PerPage)  # continue if full page returned
                 
                 if (-not $AllAlerts -or $AllAlerts.Count -eq 0) {
-                    Write-Highlight "✅ No open Dependabot alerts found with severity Critical, High, or Moderate."
+                    Write-Highlight "✅ No open Dependabot alerts found with severity Critical, High, or Medium."
                 }
                 else {
-                    Write-Error "⚠️ Found $($AllAlerts.Count) open Dependabot alerts (Critical/High/Moderate)"
-                    Write-Host "⚠️ Found $($AllAlerts.Count) open Dependabot alerts (Critical/High/Moderate): \n"
+                    Write-Error "⚠️ Found $($AllAlerts.Count) open Dependabot alerts (Critical/High/Medium)"
+                    Write-Host "⚠️ Found $($AllAlerts.Count) open Dependabot alerts (Critical/High/Medium): \n"
                     $AllAlerts | Select-Object `
                         number, `
                         state, `

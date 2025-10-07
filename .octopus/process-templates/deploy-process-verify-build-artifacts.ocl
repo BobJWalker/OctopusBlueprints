@@ -339,6 +339,11 @@ step "check-github-for-open-vulnerabilities" {
     action {
         action_type = "Octopus.Script"
         is_required = true
+        notes = <<-EOT
+                **Always Runs**
+                
+                It uses the GitHub API to check for open critical or high vulnerability reports before allowing the deployment to proceed.
+                EOT
         properties = {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
@@ -372,7 +377,7 @@ step "check-github-for-open-vulnerabilities" {
                         $Response = Invoke-RestMethod -Uri $Url -Headers $Headers -Method Get
                     }
                     catch {
-                        Write-Error "Error fetching alerts from page $Page: $_"
+                        Write-Error "Error fetching alerts from page: $Page"
                         break
                     }
                 

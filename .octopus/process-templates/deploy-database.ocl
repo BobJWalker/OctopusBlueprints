@@ -125,8 +125,40 @@ step "build-delta-report" {
                 	Write-Highlight "One or more commands found requires a DBA to approve."
                 }
                 
+                $scriptContainsChanges = $false
+                $commandsIndicatingaChange = "Insert,Update,Delete,Select"
+                if ($approvalRequired -eq $true) {
+                  $scriptContainsChanges = $true
+                }
+                else {
+                  $changeListToCheck = $commandsIndicatingaChange -split ","
+                  Write-Host "Looping through all commands indicating a change in $generatedReport"
+                  foreach ($command in $changeListToCheck)
+                  {
+                 	Write-Host "Checking $generatedReport for command $command"
+                   	$foundCommand = $fileContent -match "$command"
+                    
+                   	if ($foundCommand)
+                    {
+                      	Write-Highlight "$generatedReport has the command '$command'"
+                        $scriptContainsChanges = $true        
+                    }
+                  }
+                }
+                
+                if ($scriptContainsChanges -eq $false)
+                {
+                	Write-Highlight "No meaningful changes detected - skipping the deploy database step."
+                }
+                
+                
+                Write-Host "Adding ApprovalRequired with the value $ApprovalRequired as an output variable"
                 Set-OctopusVariable -name "ApprovalRequired" -value $ApprovalRequired
-                Write-Host "Variable run conditions: ##{unless Octopus.Deployment.Error}#{Octopus.Action[$stepName].Output.ApprovalRequired}##{/unless}"
+                Write-Host "Variable run conditions: ##{unless Octopus.Deployment.Error}#{Octopus.ProcessTemplate.Action[$stepName].Output.ApprovalRequired}##{/unless}"
+                
+                Write-Host "Adding DeltaScriptContainsChanges with the value $scriptContainsChanges as an output variable"
+                Set-OctopusVariable -name "DeltaScriptContainsChanges" -value $scriptContainsChanges
+                Write-Host "Variable run conditions: ##{unless Octopus.Deployment.Error}#{Octopus.ProcessTemplate.Action[$stepName].Output.DeltaScriptContainsChanges}##{/unless}"
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
@@ -197,12 +229,16 @@ step "dbas-approve-delta-script" {
 }
 
 step "deploy-database-changes" {
+    condition = "Variable"
     name = "Deploy Database Changes"
+    properties = {
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.ProcessTemplate.Action[Build Delta Report and check for auto approval].Output.DeltaScriptContainsChanges}#{/unless}"
+    }
 
     action {
         action_type = "Octopus.Script"
         notes = <<-EOT
-                **Always Runs**
+                **Runs when there are meaningful changes detected**
                 
                 Deploys the database changes by running the scripts found in the package.
                 EOT

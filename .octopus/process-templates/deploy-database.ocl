@@ -126,7 +126,7 @@ step "build-delta-report" {
                 }
                 
                 $scriptContainsChanges = $false
-                $commandsIndicatingaChange = "Insert,Update,Delete,Select"
+                $commandsIndicatingaChange = "Insert Into,Delete From"
                 if ($approvalRequired -eq $true) {
                   $scriptContainsChanges = $true
                 }

@@ -111,18 +111,18 @@ step "build-delta-report" {
                     
                    	if ($foundCommand)
                     {
-                      	Write-Highlight "$generatedReport has the command '$command'"
+                      	Write-Highlight "⚠️ $generatedReport has the command '$command'"
                         $ApprovalRequired = $true        
                     }
                 }
                 
                 if ($approvalRequired -eq $false)
                 {
-                	Write-Highlight "All scripts look good"
+                	Write-Highlight "✅ No script has a command requiring a DBA to approve."
                 }
                 else
                 {
-                	Write-Highlight "One or more commands found requires a DBA to approve."
+                	Write-Highlight "⚠️ One or more commands found requiring a DBA to approve."
                 }
                 
                 $scriptContainsChanges = $false
@@ -140,7 +140,7 @@ step "build-delta-report" {
                     
                    	if ($foundCommand)
                     {
-                      	Write-Highlight "$generatedReport has the command '$command'"
+                      	Write-Host "⚠️ $generatedReport has the command '$command'"
                         $scriptContainsChanges = $true        
                     }
                   }
@@ -148,7 +148,7 @@ step "build-delta-report" {
                 
                 if ($scriptContainsChanges -eq $false)
                 {
-                	Write-Highlight "No meaningful changes detected - skipping the deploy database step."
+                	Write-Highlight "✅ No meaningful changes detected - skipping the deploy database step."
                 }
                 
                 

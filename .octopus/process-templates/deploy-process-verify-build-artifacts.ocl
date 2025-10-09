@@ -181,7 +181,8 @@ step "attach-sbom-to-release" {
                   }
                   else
                   {
-                     Write-Error "⚠️ Vulnerabilities found that must be fixed.  Please update the package references and rebuild the application."
+                     Write-Highlight "⚠️ Vulnerabilities found that must be fixed.  Please update the package references and rebuild the application."
+                     exit 1
                   }
                 } 
                 EOT
@@ -251,10 +252,11 @@ step "verify-docker-containers" {
                 
                       if ($LASTEXITCODE -ne 0)
                       {
-                         Write-Error "The attestation for $packageItem could not be verified"
+                         Write-Highlight "⚠️ The attestation for $packageItem could not be verified - this means no attestation was generated or the package has been tampered with since it was created - stopping the deployment to avoid a security incident."
+                         exit 1
                       }
                 
-                      Write-Highlight "$packageItem successfully passed attestation verification"
+                      Write-Highlight "✅ $packageItem successfully passed attestation verification"
                       Write-Verbose $attestation
                 
                       Write-Host "Writing the attest output to $packageName.$OctopusEnvironmentName.attestation.json"
@@ -269,7 +271,8 @@ step "verify-docker-containers" {
                       }
                       else
                       {
-                         Write-Error "⚠️ Fixable vulnerabilities found in the build artifacts that must be fixed.  You can no longer deploy this release.  Please update the base container version, rebuild the application, and create a new release."
+                         Write-Highlight "⚠️ Fixable vulnerabilities found in the build artifacts that must be fixed.  You can no longer deploy this release.  Please update the base container version, rebuild the application, and create a new release."
+                         exit 1
                       }
                   }
                   else
@@ -298,10 +301,11 @@ step "verify-docker-containers" {
                 
                       if ($LASTEXITCODE -ne 0)
                       {
-                         Write-Error "The attestation for $packageItem could not be verified - this means no attestation was generated or the package has been tampered with since it was created - stopping the deployment to avoid a security incident."
+                         Write-Highlight "⚠️ The attestation for $packageItem could not be verified - this means no attestation was generated or the package has been tampered with since it was created - stopping the deployment to avoid a security incident."
+                         exit 1
                       }
                 
-                      Write-Highlight "$packageItem successfully passed attestation verification"
+                      Write-Highlight "✅ $packageItem successfully passed attestation verification"
                       Write-Verbose $attestation
                       $artifactVerified = $true
                 
@@ -312,7 +316,8 @@ step "verify-docker-containers" {
                 
                     if ($artifactVerified -eq $false)
                     {
-                      Write-Error "The attestation for $packageItem could not be verified - this means no attestation was generated or the package has been tampered with since it was created - stopping the deployment to avoid a security incident."
+                      Write-Highlight "⚠️ The attestation for $packageItem could not be verified - this means no attestation was generated or the package has been tampered with since it was created - stopping the deployment to avoid a security incident."
+                      exit 1
                     }
                   }  
                 }

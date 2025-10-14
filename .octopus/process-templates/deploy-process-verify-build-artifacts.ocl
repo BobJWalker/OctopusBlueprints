@@ -38,6 +38,16 @@ parameter "Template.Verify.ExecutionContainerFeed" {
     label = "Verify Container Feed"
 }
 
+parameter "Template.Verify.IncludeMedium" {
+    display_settings = {
+        Octopus.ControlType = "Checkbox"
+    }
+    help_text = "Checking the checkbox indicates the template should look for `medium` severity issues in addition to `Critical` and `High`"
+    label = "Include Medium Severity issues"
+
+    value "False" {}
+}
+
 step "get-packages-and-build-information" {
     name = "Get Packages and Build Information"
 
@@ -162,6 +172,7 @@ step "attach-sbom-to-release" {
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].ExtractedPath"]
+                $includeMedium = $OctopusParameters["Template.Verify.IncludeMedium"]
                 
                 Write-Host "The SBOM extracted file path is this value $extractedPath"
                       
@@ -173,7 +184,12 @@ step "attach-sbom-to-release" {
                   New-OctopusArtifact -Path $sbom.FullName -Name "$OctopusEnvironmentName.SBOM.JSON"  
                 
                   Write-Host "Running trivy to scan the SBOM for any new vulnerabilities since the build was run"
-                  trivy sbom $sbom.FullName --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet
+                  if ($includeMedium -eq "True") {
+                    trivy sbom $sbom.FullName --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet
+                  }
+                  else {
+                    trivy sbom $sbom.FullName --severity "HIGH,CRITICAL" --ignore-unfixed --quiet
+                  }  
                 
                   if ($LASTEXITCODE -eq 0)
                   {
@@ -228,6 +244,7 @@ step "verify-docker-containers" {
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
+                $includeMedium = $OctopusParameters["Template.Verify.IncludeMedium"]
                 
                 $objectArrayRaw = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.PackagesToVerify"]
                 $objectArray = ConvertFrom-Json $ObjectArrayRaw
@@ -263,8 +280,14 @@ step "verify-docker-containers" {
                       New-Item -Name "$packageName.$OctopusEnvironmentName.attestation.json" -ItemType "File" -Value $attestation
                       New-OctopusArtifact -Path "$packageName.$OctopusEnvironmentName.attestation.json" -Name  "$packageName.$OctopusEnvironmentName.attestation.json"
                 
-                      Write-Host "Running trivy to check the container for any known vulnerabilities that might have been discovered since the build."      
-                      trivy image --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet $packageItem
+                      Write-Host "Running trivy to check the container for any known vulnerabilities that might have been discovered since the build." 
+                      if ($includeMedium -eq "True") {
+                        trivy image --severity "MEDIUM,HIGH,CRITICAL" --ignore-unfixed --quiet $packageItem
+                      }      
+                      else {
+                        trivy image --severity "HIGH,CRITICAL" --ignore-unfixed --quiet $packageItem
+                      }
+                      
                       if ($LASTEXITCODE -eq 0)
                       {
                           Write-Highlight "✅ Successfully verified $packageItem has no new fixed vulnerabilities have been found."
@@ -357,7 +380,8 @@ step "check-github-for-open-vulnerabilities" {
                   param (
                     $Token,
                     $Repo,
-                    $IsDependabot    
+                    $IsDependabot,
+                    $IncludeMediumSeverity
                   )
                 
                   $Headers = @{
@@ -375,13 +399,20 @@ step "check-github-for-open-vulnerabilities" {
                     $Url = "https://api.github.com/repos/$repo"
                 
                     if ($IsDependabot) {
-                      $Url += "/dependabot"
+                      $Url += "/dependabot/alerts?state=open"
                     }
                     else {
-                      $Url += "/code-scanning"
+                      $Url += "/code-scanning/alerts?state=open"
                     }
-                    
-                    $Url += "/alerts?state=open&severity=critical&severity=high&per_page=$PerPage&page=$Page"     
+                
+                    if ($includeMediumSeverity -eq "True") {
+                      $Url += "&severity=critical&severity=high&severity=medium"     
+                    }
+                    else {
+                      $Url += "&severity=critical&severity=high"
+                    } 
+                
+                    $Url += "&per_page=$PerPage&page=$Page"
                 
                     Write-Host "Fetching page $Page of code scanning alerts for $Owner/$Repo ..."    
                 
@@ -403,22 +434,22 @@ step "check-github-for-open-vulnerabilities" {
                   if (-not $AllAlerts -or $AllAlerts.Count -eq 0) {
                     if ($IsDependabot)
                     {
-                      Write-Highlight "✅ No open GitHub Dependabot alerts found with Critical or High severity."
+                      Write-Highlight "✅ No open GitHub Dependabot alerts found."
                     }
                     else
                     {
-                      Write-Highlight "✅ No open GitHub Code Scanning alerts found with Critical or High severity."
+                      Write-Highlight "✅ No open GitHub Code Scanning alerts found."
                     }
                     
                   }
                   else {
                     if ($IsDependabot)
                     {
-                      Write-Highlight "⚠️ Found $($AllAlerts.Count) open [GitHub Dependabot alerts](https://github.com/$repo/security/dependabot) with Critical or High severity."
+                      Write-Highlight "⚠️ Found $($AllAlerts.Count) open [GitHub Dependabot alerts](https://github.com/$repo/security/dependabot)."
                     }
                     else
                     {
-                      Write-Highlight "⚠️ Found $($AllAlerts.Count) open [GitHub Code Scanning alerts](https://github.com/$repo/security/code-scanning) with Critical or High severity."
+                      Write-Highlight "⚠️ Found $($AllAlerts.Count) open [GitHub Code Scanning alerts](https://github.com/$repo/security/code-scanning)."
                     }    
                     
                     Write-Error "Unable to proceed as open alerts in GitHub were found."    
@@ -427,9 +458,10 @@ step "check-github-for-open-vulnerabilities" {
                 
                 $githubLessUrl = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.GitHubRepoName"]
                 $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
+                $includeMedium = $OctopusParameters["Template.Verify.IncludeMedium"]
                 
-                Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $true
-                Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $false 
+                Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $true -IncludeMediumSeverity $includeMedium
+                Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $false -IncludeMediumSeverity $includeMedium
                 
                 
                 EOT

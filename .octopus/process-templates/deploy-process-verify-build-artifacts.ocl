@@ -157,7 +157,7 @@ step "get-packages-and-build-information" {
 }
 
 step "attach-sbom-to-release" {
-    name = "Attach SBOM and Check for Open Vulnerabilities"
+    name = "Attach and Verify SBOM"
 
     action {
         action_type = "Octopus.Script"
@@ -193,7 +193,7 @@ step "attach-sbom-to-release" {
                 
                   if ($LASTEXITCODE -eq 0)
                   {
-                    Write-Highlight "✅ Successfully scanned the SBOM and no new vulnerabilities were found in the referenced third-party libraries."
+                    Write-Highlight "✅ Successfully verified the SBOM and no new vulnerabilities were found in the referenced third-party libraries."
                   }
                   else
                   {

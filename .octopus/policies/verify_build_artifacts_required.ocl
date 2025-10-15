@@ -24,7 +24,8 @@ conditions {
         result := {"allowed": true} if {
             some step in input.Steps
             step.Source.SlugOrId == "deploy-process-verify-build-artifacts" 
-            step.Enabled == true           
+            step.Enabled == true   
+            semver.compare(step.Source.Version, "2.8.0") >= 0        
             not verify_build_artifacts_skipped
         }
 

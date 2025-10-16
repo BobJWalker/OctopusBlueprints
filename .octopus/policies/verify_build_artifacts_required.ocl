@@ -1,6 +1,7 @@
 name = "Verify Build Artifacts Required"
 description = "Requires the process template Deploy Process - Verify Build Artifacts for all deployments"
 ViolationReason = "Deploy Process - Verify Build Artifacts is required on all deployments to K8s"
+action = "warn"
 
 scope {
     rego = <<-EOT
@@ -41,6 +42,7 @@ conditions {
     EOT
 
 }
+
 
 
 

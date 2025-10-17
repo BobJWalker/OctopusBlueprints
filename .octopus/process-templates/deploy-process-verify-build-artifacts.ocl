@@ -303,12 +303,12 @@ step "verify-docker-containers" {
                     if (Test-Path "/octopus/Files/")
                     {
                       Write-Host "$artifactToCompare is a package from our local repo, getting the information from /octopus/Files/"
-                      $zipFiles = Get-ChildItem -Path "/octopus/Files/" -Filter "*$($artifactToCompare[0])*$($artifactToCompare[1])@*.zip" -Recurse
+                      $zipFiles = Get-ChildItem -Path "/octopus/Files/" -Filter "*$($artifactToCompare[0])*$($artifactToCompare[1])@*.zip" -Recurse | Sort-Object LastWriteTime -Descending
                     }
                     else
                     {
                       Write-Host "$artifactToCompare is a package from our local repo, getting the information from /home/Octopus/Files"
-                      $zipFiles = Get-ChildItem -Path "/home/Octopus/Files" -Filter "*$($artifactToCompare[0])*$($artifactToCompare[1])@*.zip" -Recurse
+                      $zipFiles = Get-ChildItem -Path "/home/Octopus/Files" -Filter "*$($artifactToCompare[0])*$($artifactToCompare[1])@*.zip" -Recurse | Sort-Object LastWriteTime -Descending
                     }
                 
                     $artifactVerified = $false

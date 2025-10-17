@@ -264,11 +264,12 @@ step "verify-docker-containers" {
                   {
                       $imageToAttest = "oci://$packageItem"
                 
-                      Write-Host "Attesting to $imageToAttest in the repo $githubLessUrl"
+                      Write-Host "Attesting to $imageToAttest in the repo $githubLessUrl"      
                       $attestation=gh attestation verify "$imageToAttest" --repo $githubLessUrl --format json 
                 
                       if ($LASTEXITCODE -ne 0)
                       {
+                         Write-Host "The attestation failed - run the following locally to test the attestation - gh attestation verify '$imageToAttest' --repo $githubLessUrl --format json"
                          Write-Highlight "⚠️ The attestation for $packageItem could not be verified - this means no attestation was generated or the package has been tampered with since it was created - stopping the deployment to avoid a security incident."
                          exit 1
                       }
@@ -324,6 +325,7 @@ step "verify-docker-containers" {
                 
                       if ($LASTEXITCODE -ne 0)
                       {
+                         Write-Host "The attestation failed - run the following locally to test the attestation - gh attestation verify "$($file.FullName)" --repo $githubLessUrl --format json"
                          Write-Highlight "⚠️ The attestation for $packageItem could not be verified - this means no attestation was generated or the package has been tampered with since it was created - stopping the deployment to avoid a security incident."
                          exit 1
                       }

@@ -1,6 +1,7 @@
-name = "Verify Build Artifacts Required"
-description = "Requires the process template Deploy Process - Verify Build Artifacts for all deployments"
+name = "Verify Build Artifacts Required Minimum Version"
+description = "Warns when the process template Deploy Process - Verify Build Artifacts for all deployments is below a specific version"
 ViolationReason = "Deploy Process - Verify Build Artifacts is required on all deployments to K8s"
+violation_action = "warn"
 
 scope {
     rego = <<-EOT
@@ -24,11 +25,12 @@ conditions {
         result := {"allowed": true} if {
             some step in input.Steps
             step.Source.SlugOrId == "deploy-process-verify-build-artifacts" 
-            step.Enabled == true                      
+            step.Enabled == true   
+            semver.compare(step.Source.Version, "2.8.0") >= 0        
             not verify_build_artifacts_skipped
         }
 
-        result := {"allowed": false, "Reason": "The process template Deploy Process - Verify Build Artifacts is required and cannot be skipped for a deployment to K8s to any environment."} if {
+        result := {"allowed": false, "Reason": "The process template Deploy Process - Verify Build Artifacts must have a minimum version of 2.8.0 and cannot be skipped for a deployment to K8s to any environment."} if {
             verify_build_artifacts_skipped
         }
 

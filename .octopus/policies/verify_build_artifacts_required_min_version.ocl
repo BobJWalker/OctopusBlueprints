@@ -5,7 +5,7 @@ violation_action = "warn"
 
 scope {
     rego = <<-EOT
-        package verify_build_artifacts_required
+        package verify_build_artifacts_required_min_version
 
 		default evaluate := false
 
@@ -18,7 +18,7 @@ scope {
 
 conditions {
     rego = <<-EOT
-        package verify_build_artifacts_required
+        package verify_build_artifacts_required_min_version
 
         default result := {"allowed": false}
 

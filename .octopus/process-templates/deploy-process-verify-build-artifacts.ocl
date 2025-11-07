@@ -393,11 +393,8 @@ step "check-github-for-open-vulnerabilities" {
                 
                   # Collect all alerts
                   $AllAlerts = @()
-                  $Page = 1
-                  $PerPage = 100
                 
-                  do {
-                    # Build API URL with severity filter
+                   # Build API URL with severity filter
                     $Url = "https://api.github.com/repos/$repo"
                 
                     if ($IsDependabot) {
@@ -412,11 +409,7 @@ step "check-github-for-open-vulnerabilities" {
                     }
                     else {
                       $Url += "&severity=critical&severity=high"
-                    } 
-                
-                    $Url += "&per_page=$PerPage&page=$Page"
-                
-                    Write-Host "Fetching page $Page of code scanning alerts for $Owner/$Repo ..."    
+                    }  
                 
                     try {
                         Write-Host "Invoking $url to get open alerts"
@@ -429,9 +422,7 @@ step "check-github-for-open-vulnerabilities" {
                 
                     if ($Response) {
                         $AllAlerts += $Response
-                        $Page++
                     }
-                  } while ($Response.Count -eq $PerPage)  # continue if full page returned
                 
                   if (-not $AllAlerts -or $AllAlerts.Count -eq 0) {
                     if ($IsDependabot)

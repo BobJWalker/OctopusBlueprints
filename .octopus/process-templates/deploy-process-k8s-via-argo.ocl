@@ -1,2 +1,63 @@
 name = "Deploy Process - K8s via Argo"
 description = "A process template that will deploy to Kubernetes via ArgoCD"
+
+icon {
+    color = "#1A77CA"
+    id = ""
+}
+
+parameter "Template.Package.ToDeploy" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The Docker Container to deploy to Kubernetes via ArgoCD"
+    label = "Docker Container"
+}
+
+parameter "Template.Worker.Pool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "The worker pool where the work will be executed on."
+    label = "Worker Pool"
+}
+
+step "update-argo-cd-application-image-tags" {
+    name = "Update Argo CD Application Image Tags"
+
+    action {
+        action_type = "Octopus.ArgoCDUpdateImageTags"
+        properties = {
+            Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus #{Octopus.Environment.Name} manifest image tag to #{Octopus.Release.Number}"
+            Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
+        }
+        worker_pool_variable = "#{Template.Worker.Pool}"
+
+        packages "Template.Package.ToDeploy" {
+            acquisition_location = "NotAcquired"
+            package_id = ""
+            properties = {
+                Extract = "false"
+                PackageParameterName = "Template.Package.ToDeploy"
+                Purpose = "DockerImageReference"
+                SelectionMode = "deferred"
+            }
+        }
+    }
+}
+
+step "wait-for-sync" {
+    name = "Wait for Sync"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = "Write-Host \"Sync has completed.\""
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{Template.Worker.Pool}"
+    }
+}

@@ -1,0 +1,2 @@
+name = "Deploy Process - K8s via Argo"
+description = "A process template that will deploy to Kubernetes via ArgoCD"

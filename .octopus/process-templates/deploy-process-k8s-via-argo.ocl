@@ -6,12 +6,21 @@ icon {
     id = ""
 }
 
-parameter "Template.Package.ToDeploy" {
+parameter "Template.Package.WebFrontEnd" {
     display_settings = {
         Octopus.ControlType = "Package"
     }
-    help_text = "The Docker Container to deploy to Kubernetes via ArgoCD"
-    label = "Docker Container"
+    help_text = "The Docker Container representing the web front end to deploy to Kubernetes via ArgoCD"
+    label = "Web Front End Container"
+}
+
+parameter "Template.Package.ServiceBackEnd" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The Docker Container representing the service backend to deploy to Kubernetes via ArgoCD"
+    is_optional = true
+    label = "Service Back End Container"
 }
 
 parameter "Template.Worker.Pool" {
@@ -33,12 +42,23 @@ step "update-argo-cd-application-image-tags" {
         }
         worker_pool_variable = "#{Template.Worker.Pool}"
 
-        packages "Template.Package.ToDeploy" {
+        packages "Template.Package.WebFrontEnd" {
             acquisition_location = "NotAcquired"
             package_id = ""
             properties = {
                 Extract = "false"
-                PackageParameterName = "Template.Package.ToDeploy"
+                PackageParameterName = "Template.Package.WebFrontEnd"
+                Purpose = "DockerImageReference"
+                SelectionMode = "deferred"
+            }
+        }
+
+        packages "Template.Package.ServiceBackEnd" {
+            acquisition_location = "NotAcquired"
+            package_id = ""
+            properties = {
+                Extract = "false"
+                PackageParameterName = "Template.Package.ServiceBackEnd"
                 Purpose = "DockerImageReference"
                 SelectionMode = "deferred"
             }

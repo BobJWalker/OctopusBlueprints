@@ -27,6 +27,11 @@ step "update-argo-cd-application-image-tags" {
 
     action {
         action_type = "Octopus.ArgoCDUpdateImageTags"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Updates the git repo and folder the ArgoCD application is pointing to so ArgoCD can do it's thing.
+                EOT
         properties = {
             Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus #{Octopus.Environment.Name} manifest image tag to #{Octopus.Release.Number}"
             Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
@@ -48,10 +53,15 @@ step "update-argo-cd-application-image-tags" {
 }
 
 step "wait-for-sync" {
-    name = "Wait for Sync"
+    name = "Sync and Wait"
 
     action {
         action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Invokes the sync command on the ArgoCD instance and waits for the sync to complete.
+                EOT
         properties = {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = "Write-Host \"Sync has completed.\""

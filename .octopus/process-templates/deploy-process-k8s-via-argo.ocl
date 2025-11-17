@@ -3,7 +3,7 @@ description = "A process template that will deploy to Kubernetes via ArgoCD"
 
 icon {
     color = "#1A77CA"
-    id = ""
+    id = "acorn"
 }
 
 parameter "Template.Package.WebFrontEnd" {

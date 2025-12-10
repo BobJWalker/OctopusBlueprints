@@ -1,50 +1,41 @@
-name = "Verify Build Artifacts Required"
-description = "Requires the process template Deploy Process - Verify Build Artifacts for all deployments"
-ViolationReason = "Deploy Process - Verify Build Artifacts is required on all deployments to K8s"
-
-scope {
-    rego = <<-EOT
-        package verify_build_artifacts_required
-
-		default evaluate := false
-
-		evaluate := true if {
-            input.ProjectGroup.Slug == "kubernetes" 
-            not input.Runbook           
-        }
-    EOT
-}
+name = "Non Tenanted Build Artifact Verification Required"
+description = "Requires the process template Deploy Process - Verify Build Artifacts for all non-tenanted deployments"
+violation_reason = "Deploy Process - Verify Build Artifacts is required on all non-tenanted deployments to K8s"
 
 conditions {
     rego = <<-EOT
-        package verify_build_artifacts_required
-
-        default result := {"allowed": false}
-
-        result := {"allowed": true} if {
-            some step in input.Steps
-            step.Source.SlugOrId == "deploy-process-verify-build-artifacts" 
-            step.Enabled == true                      
-            not verify_build_artifacts_skipped
-        }
-
-        result := {"allowed": false, "Reason": "The process template Deploy Process - Verify Build Artifacts is required and cannot be skipped for a deployment to K8s to any environment."} if {
-            verify_build_artifacts_skipped
-        }
-
-        verify_build_artifacts_skipped if {
-            some step in input.Steps
-            step.Id in input.SkippedSteps
-            step.Source.SlugOrId == "deploy-process-verify-build-artifacts"
-        }
-    EOT
-
+                package verify_build_artifacts_required
+            
+                default result := {"allowed": false}
+            
+                result := {"allowed": true} if {
+                    some step in input.Steps
+                    step.Source.SlugOrId == "deploy-process-verify-build-artifacts" 
+                    step.Enabled == true                      
+                    not verify_build_artifacts_skipped
+                }
+            
+                result := {"allowed": false, "Reason": "The process template Deploy Process - Verify Build Artifacts is required and cannot be skipped for a deployment to K8s to any environment."} if {
+                    verify_build_artifacts_skipped
+                }
+            
+                verify_build_artifacts_skipped if {
+                    some step in input.Steps
+                    step.Id in input.SkippedSteps
+                    step.Source.SlugOrId == "deploy-process-verify-build-artifacts"
+                }
+            EOT
 }
 
-
-
-
-
-
-
-
+scope {
+    rego = <<-EOT
+                  package verify_build_artifacts_required
+            
+            default evaluate := false
+            
+            evaluate := true if {
+                      input.ProjectGroup.Slug == "kubernetes" 
+                      not input.Runbook           
+                  }
+            EOT
+}

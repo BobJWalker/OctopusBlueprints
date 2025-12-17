@@ -1,11 +1,28 @@
 name = "Require Azure Key Vault"
-violation_action = "block"
+violation_action = "warn"
+violation_reason = "Azure Key Vault must be required for all deployments and runbook runs."
 
 conditions {
     rego = <<-EOT
-            package require_azure_key_vault
+                package require_azure_key_vault
             
-            default result := {"allowed": true}
+                default result := {"allowed": false}
+            
+                result := {"allowed": true} if {
+                    some step in input.Steps
+                    step.Slug == "azure-key-vault-retrieve-secrets"
+                    not azure_key_vault_skipped
+                }
+            
+                result := {"allowed": false, "Reason": "Azure Key Vault is required and cannot be skipped for a deployment or runbook run to any environment."} if {
+                    azure_key_vault_skipped
+                }
+            
+                azure_key_vault_skipped if {
+                    some step in input.Steps
+                    step.Id in input.SkippedSteps
+                    step.Slug == "azure-key-vault-retrieve-secrets"
+                }
             EOT
 }
 
@@ -13,6 +30,8 @@ scope {
     rego = <<-EOT
             package require_azure_key_vault
             
-            default evaluate := true
+            default evaluate := false
+            
+            evaluate := true if startswith(input.ProjectGroup.Name, "Kubernetes")
             EOT
 }

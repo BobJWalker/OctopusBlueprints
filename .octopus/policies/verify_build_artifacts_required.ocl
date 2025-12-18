@@ -26,9 +26,11 @@ conditions {
                 step.Source.SlugOrId == "deploy-process-verify-build-artifacts"
             }
             
+            all_packages := [pkg | some step in input.Steps; some pkg in step.Packages]
+            
             verify_not_from_main if {
-                some step, pkg
-                pkg := input.Steps[_].Packages[_]    
+                count(all_packages) > 0
+                some pkg in all_packages    
                 pkg.GitRef != "main"
             }
             EOT

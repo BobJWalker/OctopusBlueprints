@@ -1,5 +1,5 @@
-name = "Deploy Process - Attach SBOM and Verify Build Artifacts"
-description = "A process template that attaches the SBOM to the deployment and compares the SHA256 hashes of the build artifacts."
+name = "Deploy Process - Scan SBOM and Build Artifacts"
+description = "A process template that scans SBOM and any docker containers any known critical or high vulnerabilities, and verifies the attestation of the build artifacts."
 
 icon {
     color = "#173B56"

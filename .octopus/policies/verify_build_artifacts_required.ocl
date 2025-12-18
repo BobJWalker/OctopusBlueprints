@@ -29,7 +29,7 @@ conditions {
             verify_not_from_main if {
                 some step, pkg
                 pkg := input.Steps[_].Packages[_]    
-                pkg.GitRef != "refs/heads/main"
+                pkg.GitRef != "main"
             }
             EOT
 }

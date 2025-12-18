@@ -1,6 +1,6 @@
 name = "Require Azure Key Vault"
 violation_action = "warn"
-violation_reason = "Azure Key Vault must be required for all deployments and runbook runs."
+violation_reason = "Azure Key Vault is required for all deployments and runbook runs."
 
 conditions {
     rego = <<-EOT

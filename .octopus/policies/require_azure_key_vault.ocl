@@ -33,8 +33,7 @@ scope {
             default evaluate := false
             
             evaluate if { 
-                input.ProjectGroup.Slug == "kubernetes"
-                not input.Project.Slug == "spear"
+                input.ProjectGroup.Slug == "kubernetes"    
             }
             EOT
 }

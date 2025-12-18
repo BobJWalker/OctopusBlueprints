@@ -34,6 +34,7 @@ scope {
             
             evaluate if { 
                 input.ProjectGroup.Slug == "kubernetes"
+                not input.Project.Slug == "spear"
             }
             EOT
 }

@@ -32,6 +32,9 @@ scope {
             
             default evaluate := false
             
-            evaluate := true if startswith(input.ProjectGroup.Name, "Kubernetes")
+            evaluate if { 
+                input.ProjectGroup.Slug == "kubernetes"
+                not input.Project.Slug == "spear"
+            }
             EOT
 }

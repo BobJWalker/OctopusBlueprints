@@ -1,5 +1,5 @@
 name = "Require Azure Key Vault"
-violation_action = "warn"
+violation_action = "block"
 violation_reason = "Azure Key Vault is required for all deployments and runbook runs."
 
 conditions {

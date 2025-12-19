@@ -1,11 +1,31 @@
 name = "Check Supply Chain"
+description = "Ensures the process template `Deploy Process - Scan SBOM and Build Aritfacts` is included in all deployments"
 violation_action = "block"
+violation_reason = "The process template Deploy Process - Scan SBOM and Build Artifacts is required and cannot be skipped for a deployment to any environment."
 
 conditions {
     rego = <<-EOT
             package check_supply_chain
             
-            default result := {"allowed": true}
+            default result := {"allowed": false}
+            
+            result := {"allowed": true} if {
+                some step in input.Steps
+                step.Source.SlugOrId == "deploy-process-verify-build-artifacts" 
+                step.Enabled == true                      
+                not verify_build_artifacts_skipped
+            }
+            
+            result := {"allowed": false, "Reason": ""} if {
+                verify_build_artifacts_skipped
+            }
+            
+            verify_build_artifacts_skipped if {
+                some step in input.Steps
+                step.Id in input.SkippedSteps
+                step.Source.SlugOrId == "deploy-process-verify-build-artifacts"
+            }
+            
             EOT
 }
 
@@ -13,6 +33,13 @@ scope {
     rego = <<-EOT
             package check_supply_chain
             
-            default evaluate := true
+            default evaluate := false
+            
+            evaluate := true if {
+                input.ProjectGroup.Slug == "kubernetes"
+                input.Environment.Slug in ["test", "staging", "production"]
+                not input.Runbook           
+            }
+            
             EOT
 }

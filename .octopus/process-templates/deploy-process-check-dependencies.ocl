@@ -1,2 +1,556 @@
 name = "Deploy Process - Check Dependencies"
 description = "A process template that will ensure all the required dependent projects are deployed."
+
+parameter "Template.Worker.Pool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "**Required** - The worker pool where this script will run."
+    label = "Worker Pool"
+}
+
+parameter "Template.Octopus.Api.Key" {
+    display_settings = {
+        Octopus.ControlType = "Sensitive"
+    }
+    help_text = <<-EOT
+            **Required** - Octopus Deploy API Key with permissions to:
+            
+            - Query for spaces, projects, environments, releases, deployments, and tenants
+            - Trigger deployments for the dependencies (if that option is chosen)
+            EOT
+    label = "Octopus Deploy API Key"
+}
+
+parameter "Template.Dependency.Projects" {
+    display_settings = {
+        Octopus.ControlType = "MultiLineText"
+    }
+    help_text = <<-EOT
+            **Required** - JSON Array Representing the dependencies for this project.
+            
+            ```
+            [
+              {
+                "projectName": "Spear", # Required - the name of the project of the dependency.
+                "minVersion": "1.0.42", # Required - the minimum version required.  Can be a specific number or a wild card.
+                "deployGroup": 1, # Optional- indicates which projects can be deployed concurrently vs. which ones that cannot.  If omitted all dependencies are deployed sequentially.    
+                "spaceName": "Default", #Optional - uses the current space if not provided
+                "tenantName": null #Optional - the name of the tenant to deploy.  If not specified will use the current tenant being deployed (if doing a tenanted deployment)
+              },
+              {
+                "minVersion": "2.4.*",
+                "spaceName": "Default",
+                "projectName": "TAKA",
+                "deployGroup": 1
+              },
+              {
+                "minVersion": "4.*",
+                "spaceName": "Default",
+                "projectName": "TAWA",
+                "deployGroup": 2
+              }
+            ]
+            ```
+            EOT
+    label = "Project Dependencies"
+}
+
+parameter "Template.Environment.Name" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "**Required** - The name of the target environment you want to check and deploy dependencies to."
+    label = "Target Environment"
+
+    value "#{Octopus.Environment.Name}" {}
+}
+
+parameter "Template.Dependency.Action" {
+    display_settings = {
+        Octopus.ControlType = "Select"
+        Octopus.SelectOptions = <<-EOT
+            Stop|Stop and Fail Deployment
+            Continue|Continue deployment
+            DeployLatest|Deploy latest version of dependencies to environment
+            DeployMatching|Deploy latest matching version of dependencies to environment
+            EOT
+    }
+    help_text = <<-EOT
+            **Required** What the template should do if the dependency check fails.
+            
+            - **Stop and Fail Deployment:** If one or more of the dependency checks fail it will stop and fail the deployment.
+            - **Continue without requiring approval:** Will proceed with the deployment even if the dependency check fails.
+            - **Deploy latest version of dependencies to environment:** Will trigger the deployments for any dependencies to the target environment.  If dependency requires `4.5.*` in prod and latest is `5.1.2` in test, it will deploy `5.1.2`
+            - **Deploy latest matching version of dependencies to environment:** Will trigger the deployment of the latest matching dependency to the target environment.  If dependency requires `4.5.*` in prod and latest is `5.1.2` and `4.5.12` in test, it will deploy `4.5.12`
+            EOT
+    label = "Dependency Action"
+
+    value "Stop" {}
+}
+
+parameter "Template.Dependency.Approval" {
+    display_settings = {
+        Octopus.ControlType = "Select"
+        Octopus.SelectOptions = <<-EOT
+            Yes|Yes
+            No|No
+            EOT
+    }
+    help_text = "**Required** - Require approval via a manual intervention if the dependency check fails and you wish to continue or deploy the child dependencies."
+    label = "Require approval to proceed"
+
+    value "Yes" {}
+}
+
+parameter "Template.Approval.Teams" {
+    display_settings = {
+        Octopus.ControlType = "Teams"
+    }
+    help_text = "**Required** - The list of teams who can approval the manual intervention."
+    label = "Approval Teams"
+}
+
+parameter "Template.Tenant.Name" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "**Optional** - The name of the tenant you want to check and deploy the dependencies for"
+    is_optional = true
+    label = "Target Tenant"
+
+    value "#{Octopus.Deployment.Tenant.Name}" {}
+}
+
+step "check-dependencies" {
+    name = "Check Dependencies"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $parameterOctopusAPIKey = $OctopusParameters["Template.Octopus.Api.Key"]
+                $parameterOctopusInstance = $OctopusParameters["Octopus.Web.ServerUri"]
+                $parameterDependencies = $OctopusParameters["Template.Dependency.Projects"]
+                $parameterOlderDependencyAction = $OctopusParameters["Template.Dependency.Action"]
+                
+                $parameterTargetEnvironmentName = $OctopusParameters["Template.Environment.Name"] # Target environment for deployment
+                $parameterTargetTenantName = $OctopusParameters["Template.Tenant.Name"] # Target Tenant for deployment (when doing multi-tenancy)
+                $parameterSpaceName = $OctopusParameters["Octopus.Space.Name"] # Space name to use for API calls, if not specified will attempt to look up based on space name
+                $parameterMinAvailableTaskCap = "2" # Minimum number of available deployment tasks required to proceed with deployment if deploying out of date dependencies
+                $parameterDeploymentTimeoutMinutes = 30 # Timeout for each deployment in minutes
+                
+                function Get-OctopusUrl
+                {
+                    param (
+                        $EndPoint,
+                        $SpaceId,
+                        $OctopusUrl
+                    )
+                
+                    $octopusUrlToUse = $OctopusUrl
+                    if ($OctopusUrl.EndsWith("/"))
+                    {
+                        $octopusUrlToUse = $OctopusUrl.Substring(0, $OctopusUrl.Length - 1)
+                    }
+                
+                    if ($EndPoint -match "/api")
+                    {
+                        if (!$EndPoint.StartsWith("/api"))
+                        {
+                            $EndPoint = $EndPoint.Substring($EndPoint.IndexOf("/api"))
+                        }
+                
+                        return "$octopusUrlToUse$EndPoint"
+                    }
+                
+                    if ([string]::IsNullOrWhiteSpace($SpaceId))
+                    {
+                        return "$octopusUrlToUse/api/$EndPoint"
+                    }
+                
+                    return "$octopusUrlToUse/api/$spaceId/$EndPoint"
+                }
+                
+                function Invoke-OctopusApi
+                {
+                    param
+                    (
+                        $octopusUrl,
+                        $spaceId,
+                        $endPoint,
+                        $apiKey,
+                        $method,
+                        $item,        
+                        $retryCount
+                    )
+                
+                    try
+                    {        
+                        $url = Get-OctopusUrl -EndPoint $endPoint -SpaceId $spaceId -OctopusUrl $octopusUrl
+                
+                        if ($null -eq $item)
+                        {
+                            Write-Verbose "No data to post or put, calling bog standard invoke-restmethod for $url"
+                            return Invoke-RestMethod -Method $method -Uri $url -Headers @{"X-Octopus-ApiKey" = "$ApiKey" } -ContentType 'application/json; charset=utf-8' -TimeoutSec 60
+                        }
+                
+                        $body = $item | ConvertTo-Json -Depth 10
+                        Write-Verbose $body
+                
+                        Write-Verbose "Invoking $method $url"
+                        return Invoke-RestMethod -Method $method -Uri $url -Headers @{"X-Octopus-ApiKey" = "$ApiKey" } -Body $body -ContentType 'application/json; charset=utf-8' -TimeoutSec 60
+                    }
+                    catch [System.TimeoutException]
+                    {        
+                        $newRetryCount = 1
+                        if ($null -ne $retryCount)
+                        {
+                            $newRetryCount = $retryCount + 1
+                        }
+                
+                        if ($newRetryCount -gt 4)
+                        {
+                            Throw "Timeout detected, max retries has been exceeded for this call.  Exiting."
+                        }
+                        else 
+                        {
+                            Write-Host "Timeout detected, going to retry this call for the $newRetryCount time."
+                            Invoke-OctopusApi -url $url -apiKey $apiKey -method $method -item $item -filePath $filePath -retryCount $retryCount        
+                        }
+                    }
+                    catch
+                    {
+                        Write-Error "There was an error making a $method call to $url.  All request information (JSON body specifically) is stored in the log.  Please check that for more information."
+                
+                        if ($null -ne $_.Exception.Response)
+                        {
+                            if ($_.Exception.Response.StatusCode -eq 401)
+                            {
+                                Write-Error "Unauthorized error returned from $url, please verify API key and try again"
+                            }
+                            elseif ($_.ErrorDetails.Message)
+                            {                
+                                Write-Error -Message "Error calling $url StatusCode: $($_.Exception.Response) $($_.ErrorDetails.Message)"
+                                Write-Error $_.Exception
+                            }            
+                            else 
+                            {
+                                Write-Error $_.Exception
+                            }
+                        }
+                        else
+                        {
+                            Write-Error $_.Exception
+                        }
+                
+                        Write-Error "Stopping the deployment."
+                        Exit 1
+                    }    
+                }
+                
+                function Get-ListFromOctopusApi
+                {
+                    param (
+                        $octopusUrl,
+                        $endPoint,
+                        $spaceId,
+                        $apiKey,
+                        $propertyName
+                    )
+                
+                    $rawItemList = Invoke-OctopusApi -octopusUrl $octopusUrl -endPoint $endPoint -spaceId $spaceId -apiKey $octopusApiKey -method "GET"
+                
+                    $returnList = @($rawItemList.$propertyName)
+                
+                    Write-Verbose "The endpoint $endPoint returned a list with $($returnList.Count) items"
+                
+                    return ,$returnList
+                }
+                
+                function Get-FilteredOctopusItem
+                {
+                    param(
+                        $itemList,
+                        $itemName
+                    )
+                
+                    if ($itemList.Count -eq 0)
+                    {
+                        Write-Error "Unable to find $itemName.  Exiting with an exit code of 1."
+                        Exit 1
+                    }  
+                
+                    $item = $itemList | Where-Object { $_.Name.ToLower().Trim() -eq $itemName.ToLower().Trim() }      
+                
+                    if ($null -eq $item)
+                    {
+                        Write-Error "Unable to find $itemName.  Exiting with an exit code of 1."
+                        exit 1
+                    }
+                
+                    return $item
+                }
+                
+                function Get-OctopusItemByName
+                {
+                    param(
+                        $itemName,
+                        $itemType,
+                        $endpoint,
+                        $defaultValue,
+                        $spaceId,
+                        $octopusUrl,
+                        $octopusApiKey
+                    )
+                
+                    if ($null -ne $defaultValue)
+                    {
+                        return $defaultValue
+                    }
+                
+                    if ([string]::IsNullOrWhiteSpace($itemName) -or $itemName -like "#{Octopus*")
+                    {
+                        Write-Verbose "The item name passed in was $itemName, returning the default value for $itemType"
+                        return $defaultValue
+                    }
+                
+                    Write-Host "Attempting to find $itemType with the name of $itemName"
+                    
+                    $itemList = Get-ListFromOctopusApi -octopusUrl $octopusUrl -endPoint "$($endPoint)?partialName=$([uri]::EscapeDataString($itemName))&skip=0&take=100" -spaceId $spaceId -apiKey $octopusApiKey -method "GET" -propertyName "Items"   
+                    $item = Get-FilteredOctopusItem -itemList $itemList -itemName $itemName
+                
+                    Write-Host "Successfully found $itemName with id of $($item.Id)"
+                
+                    return $item
+                }
+                
+                function Get-DeploymentTasks
+                {
+                    param (
+                        $spaceId,
+                        $project,
+                        $tenant,        
+                        $environmentList,
+                        $octopusUrl,
+                        $octopusApiKey
+                    )
+                
+                    $taskEndPoint = "tasks?skip=0&take=100&spaces=$spaceId&includeSystem=false&project=$($project.Id)&name=Deploy&states=Success"
+                
+                    if ($null -ne $tenant)
+                    {
+                        $taskEndPoint += "&tenant=$($tenant.Id)"
+                    }
+                
+                    $taskList = @()
+                
+                    foreach ($environmentId in $environmentList)
+                    {
+                        $octopusTaskList = Get-ListFromOctopusApi -octopusUrl $octopusUrl -endPoint "$($taskEndPoint)&environment=$environmentId" -spaceId $null -apiKey $octopusApiKey -method "GET" -propertyName "Items"
+                        $taskList += $octopusTaskList
+                    }
+                
+                    $orderedTaskList = @($taskList | Sort-Object -Property StartTime -Descending)
+                    Write-Verbose "We have $($orderedTaskList.Count) number of tasks to loop through"
+                
+                    return $orderedTaskList
+                }
+                
+                function Get-MatchingDeployedVersion
+                {
+                    param(
+                        $dependency,
+                        $environment,
+                        $space,
+                        $octopusUrl,
+                        $octopusApiKey
+                    )
+                
+                    $deploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $null -environmentList @($environment.Id) -octopusUrl $octopusUrl -octopusApiKey $octopusApiKey
+                    
+                    foreach ($task in $deploymentTasks)
+                    {
+                        $deploymentInformation = Invoke-OctopusApi -octopusUrl $parameterOctopusInstance -endPoint "deployments/$($task.Arguments.DeploymentId)" -spaceId $space.Id -apiKey $parameterOctopusAPIKey -method "GET"
+                        $releaseInformation = Invoke-OctopusApi -octopusUrl $parameterOctopusInstance -endPoint "releases/$($deploymentInformation.ReleaseId)" -spaceId $space.Id -apiKey $parameterOctopusAPIKey -method "GET"
+                
+                        if (Test-VersionNewerThanPattern -versionToCheck $releaseInformation.Version -versionPatternToCheckAgainst $dependency.MinVersion)
+                        {
+                            Write-Host "Found a deployment of $($dependency.ProjectName) with version $($releaseInformation.Version) which satisfies the minimum version requirement of $($dependency.MinVersion)"
+                            return $releaseInformation.Version
+                            break
+                        }
+                    }
+                
+                    return $null
+                }
+                
+                function Test-VersionNewerThanPattern
+                {
+                    param(
+                        $versionToCheck,
+                        $versionPatternToCheckAgainst
+                    )
+                
+                    $localVersionToCheck = Remove-PreReleaseTag -version $versionToCheck
+                    $localVersion = [version]$localVersionToCheck
+                
+                    $localPatternToCheckAgainst = Remove-PreReleaseTag -version $versionPatternToCheckAgainst
+                    $localVersionPatternToCheckAgainstArray = $localPatternToCheckAgainst.Split(".")    
+                
+                    #Test for the simple wildcard pattern of major.* - in this case we only need to worry if the major version has been deployed.
+                    if ($localVersionPatternToCheckAgainstArray.Length -eq 2 -and $localVersion.Major -eq [int]$localVersionPatternToCheckAgainstArray[0] -and (Test-NumberIsGreater -versionNumber $localVersion.Minor -versionPatternNumber $localVersionPatternToCheckAgainstArray[1]))
+                    {
+                        Write-Host "The version $localVersion satisfies the pattern $versionPatternToCheckAgainst"
+                        return $true
+                    }
+                    
+                    $localPatternVersion = [version]$localPatternToCheckAgainst.Replace(".*", "")
+                
+                    if ($localVersion -gt $localPatternVersion)
+                    {
+                        Write-Host "Version pattern satisfied version $localVersion is greater than the pattern version $localPatternVersion"
+                        return $true
+                    }
+                    elseif ($localVersion -eq $localPatternVersion)
+                    {
+                        Write-Host "Version pattern satisfied version $localVersion is equal to the pattern version $localPatternVersion"
+                        return $true
+                    }    
+                
+                    Write-Host "Version pattern failed - version $localVersion is less than the pattern version $localPatternVersion"
+                    return $false
+                }
+                
+                function Test-NumberIsGreater
+                {
+                    param(
+                        $versionNumber,
+                        $versionPatternNumber
+                    )
+                
+                    if ($versionPatternNumber -eq "*")
+                    {
+                        return $true
+                    }
+                
+                    if ([int]$versionNumber -gt [int]$versionPatternNumber)
+                    {
+                        return $true
+                    }
+                
+                    return $false
+                }
+                
+                function Remove-PreReleaseTag
+                {
+                    param(
+                        $version
+                    )
+                
+                    $localVersionToCheck = $version
+                    if ($localVersionToCheck -like "*-*")
+                    {
+                        Write-Verbose "Version $version contains a pre-release tag ($($localVersionToCheck.Substring($localVersionToCheck.IndexOf("-")))), removing that for comparison purposes"
+                        $localVersionToCheck = $localVersionToCheck.SubString(0, $localVersionToCheck.IndexOf("-"))
+                    }
+                
+                    if ($localVersionToCheck -like "*+*")
+                    {
+                        Write-Verbose "Version $version contains a pre-release tag ($($localVersionToCheck.Substring($localVersionToCheck.IndexOf("+")))), removing that for comparison purposes"
+                        $localVersionToCheck = $localVersionToCheck.SubString(0, $localVersionToCheck.IndexOf("+"))
+                    }
+                
+                    return $localVersionToCheck
+                }
+                
+                $octopusInfo = Invoke-OctopusApi -octopusUrl $parameterOctopusInstance -spaceId $null -endPoint "/api" -apiKey $parameterOctopusAPIKey -method "GET" -item $null
+                Write-Host "Connected to Octopus Deploy version $($octopusInfo.Version)"
+                
+                $canProcessInParallel = (Test-VersionNewerThanPattern -versionToCheck $octopusInfo.Version -versionPatternToCheckAgainst "2024.2.*") -and $parameterAllowParallelDeployment
+                Write-Host "Can process in parallel: $canProcessInParallel"
+                
+                $defaultSpace = Get-OctopusItemByName -itemName $spaceName -itemType "Space" -endpoint "spaces" -defaultValue $null -spaceId $null -defaultUrl $defaultUrl -octopusApiKey $octopusApiKey
+                $defaultEnvironment = Get-OctopusItemByName -itemName $parameterTargetEnvironmentName -itemType "Environment" -endpoint "environments" -defaultValue $null -spaceId $defaultSpace.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                $defaultTenant = Get-OctopusItemByName -itemName $parameterTenantName -itemType "Tenant" -endpoint "tenants" -defaultValue $null -spaceId $defaultSpace.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                
+                $dependencyResultList = @()
+                $allDependenciesSatisfied = $true
+                foreach ($dependency in $parameterDependencies)
+                {
+                    $space = Get-OctopusItemByName -itemName $dependency.SpaceName -itemType "Space" -endpoint "spaces" -defaultValue $defaultSpace -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $environment = Get-OctopusItemByName -itemName $dependency.SpaceName -itemType "Environment" -endpoint "environments" -defaultValue $defaultEnvironment -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $project = Get-OctopusItemByName -itemName $dependency.ProjectName -itemType "Project" -endpoint "projects" -defaultValue $null -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $tenant = Get-OctopusItemByName -itemName $dependency.TenantName -itemType "Tenant" -endpoint "tenants" -defaultValue $defaultTenant -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                
+                    $deploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $null -environmentList @($environment.Id) -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $deployedVersion = Get-MatchingDeployedVersion -dependency $dependency -environment $environment -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey    
+                
+                    if ($null -eq $deployedVersion)
+                    {
+                        $allDependenciesSatisfied = $false
+                        Write-Host "Unable to find a deployment of $($dependency.ProjectName) that satisfies the minimum version requirement of $($dependency.MinVersion) - you'll need to deploy the dependencies before deploying the main project."
+                    }
+                
+                    $dependencyResultList += @{
+                        "ProjectName" = $dependency.ProjectName
+                        "MinVersion" = $dependency.MinVersion
+                        "DeployedVersion" = $deployedVersion
+                        "DeployGroup" = $dependency.DeployGroup
+                        "Project" = $project
+                        "Space" = $space
+                    }
+                }
+                
+                $dependencyAsJson = ConvertTo-Json -InputObject $parameterDependencies
+                Write-Host "The dependencies you have configured are: $dependencyAsJson"
+                
+                foreach ($dependencyResult in $dependencyResultList)
+                {
+                    if ($null -eq $dependencyResult.DeployedVersion)
+                    {
+                        Write-Host "Project $($dependencyResult.ProjectName) does not satisfy the minimum version requirement of $($dependencyResult.MinVersion)."
+                    }
+                    else 
+                    {
+                        Write-Host "Project $($dependencyResult.ProjectName) is currently running $($dependencyResult.DeployedVersion). No further action needed."
+                    }
+                }
+                
+                if ($allDependenciesSatisfied -eq $true)
+                {
+                    Write-Host "All dependencies satisfy the minimum version requirements, you are clear to deploy the main project."
+                    exit 0
+                }
+                
+                if ($parameterOlderDependencyAction -eq "Stop")
+                {
+                    Write-Host "One or more dependencies do not satisfy the minimum version requirements.  Stopping the deployment as per the parameter configuration."
+                    exit 1
+                }
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{Template.Worker.Pool}"
+    }
+}
+
+step "approve-dependency-result" {
+    condition = "Variable"
+    name = "Approve Dependency Result"
+    properties = {
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Template.Dependency.Approval == \"Yes\"}#{/unless}"
+    }
+
+    action {
+        action_type = "Octopus.Manual"
+        properties = {
+            Octopus.Action.Manual.BlockConcurrentDeployments = "True"
+            Octopus.Action.Manual.Instructions = "One or more dependencies are out of date in #{Template.Environment.Name}.  Please approve the action #{Template.Dependency.Action} before proceeding."
+            Octopus.Action.Manual.ResponsibleTeamIds = "#{Template.Approval.Teams}"
+        }
+    }
+}

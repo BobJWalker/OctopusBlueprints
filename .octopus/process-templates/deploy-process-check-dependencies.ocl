@@ -1,0 +1,2 @@
+name = "Deploy Process - Check Dependencies"
+description = "A process template that will ensure all the required dependent projects are deployed."

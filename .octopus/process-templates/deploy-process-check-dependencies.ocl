@@ -499,30 +499,27 @@ step "check-dependencies" {
                     }
                 }
                 
-                $dependencyAsJson = ConvertTo-Json -InputObject $parameterDependencies
-                Write-Host "The dependencies you have configured are: $dependencyAsJson"
-                
                 foreach ($dependencyResult in $dependencyResultList)
                 {
                     if ($null -eq $dependencyResult.DeployedVersion)
                     {
-                        Write-Host "Project $($dependencyResult.ProjectName) does not satisfy the minimum version requirement of $($dependencyResult.MinVersion)."
+                        Write-Highlight "Project $($dependencyResult.ProjectName) does not satisfy the minimum version requirement of $($dependencyResult.MinVersion)."
                     }
                     else 
                     {
-                        Write-Host "Project $($dependencyResult.ProjectName) is currently running $($dependencyResult.DeployedVersion). No further action needed."
+                        Write-Highlight "Project $($dependencyResult.ProjectName) is currently running $($dependencyResult.DeployedVersion). No further action needed."
                     }
                 }
                 
                 if ($allDependenciesSatisfied -eq $true)
                 {
-                    Write-Host "All dependencies satisfy the minimum version requirements, you are clear to deploy the main project."
+                    Write-Highlight "All dependencies satisfy the minimum version requirements, you are clear to deploy this project."
                     exit 0
                 }
                 
                 if ($parameterOlderDependencyAction -eq "Stop")
                 {
-                    Write-Host "One or more dependencies do not satisfy the minimum version requirements.  Stopping the deployment as per the parameter configuration."
+                    Write-Highlight "One or more dependencies do not satisfy the minimum version requirements.  Stopping the deployment as per the parameter configuration."
                     exit 1
                 }
                 EOT

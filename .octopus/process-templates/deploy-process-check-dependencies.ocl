@@ -507,7 +507,7 @@ step "check-dependencies" {
                     }
                     else 
                     {
-                        Write-Highlight "Project $($dependencyResult.ProjectName) is currently running $($dependencyResult.DeployedVersion). No further action needed."
+                        Write-Highlight "Project $($dependencyResult.ProjectName) is currently running $($dependencyResult.DeployedVersion) which satisfies the minimum version requirement of $($dependencyResult.MinVersion). No further action needed."
                     }
                 }
                 
@@ -535,7 +535,7 @@ step "approve-dependency-result" {
     condition = "Variable"
     name = "Approve Dependency Result"
     properties = {
-        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Template.Dependency.Approval == \"Yes\"}#{/unless}"
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{if Template.Dependency.Approval == \"Yes\"}True#{else}False#{/if}#{/unless}"
     }
 
     action {

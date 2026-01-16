@@ -465,11 +465,7 @@ step "check-dependencies" {
                     return $localVersionToCheck
                 }
                 
-                $octopusInfo = Invoke-OctopusApi -octopusUrl $parameterOctopusInstance -spaceId $null -endPoint "/api" -apiKey $parameterOctopusAPIKey -method "GET" -item $null
-                Write-Host "Connected to Octopus Deploy version $($octopusInfo.Version)"
-                
-                $canProcessInParallel = (Test-VersionNewerThanPattern -versionToCheck $octopusInfo.Version -versionPatternToCheckAgainst "2024.2.*") -and $parameterAllowParallelDeployment
-                Write-Host "Can process in parallel: $canProcessInParallel"
+                $dependencyList = ConvertFrom-Json $parameterDependencies
                 
                 $defaultSpace = Get-OctopusItemByName -itemName $spaceName -itemType "Space" -endpoint "spaces" -defaultValue $null -spaceId $null -defaultUrl $defaultUrl -octopusApiKey $octopusApiKey
                 $defaultEnvironment = Get-OctopusItemByName -itemName $parameterTargetEnvironmentName -itemType "Environment" -endpoint "environments" -defaultValue $null -spaceId $defaultSpace.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
@@ -477,7 +473,7 @@ step "check-dependencies" {
                 
                 $dependencyResultList = @()
                 $allDependenciesSatisfied = $true
-                foreach ($dependency in $parameterDependencies)
+                foreach ($dependency in $dependencyList)
                 {
                     $space = Get-OctopusItemByName -itemName $dependency.SpaceName -itemType "Space" -endpoint "spaces" -defaultValue $defaultSpace -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $environment = Get-OctopusItemByName -itemName $dependency.SpaceName -itemType "Environment" -endpoint "environments" -defaultValue $defaultEnvironment -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey

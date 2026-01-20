@@ -145,6 +145,7 @@ step "check-dependencies" {
                 $parameterTargetTenantName = $OctopusParameters["Template.Tenant.Name"] # Target Tenant for deployment (when doing multi-tenancy)
                 $parameterSpaceName = $OctopusParameters["Octopus.Space.Name"] # Space name to use for API calls, if not specified will attempt to look up based on space name
                 $stepName = $OctopusParameters["Octopus.Action.StepName"]
+                $parameterApprovalRequired = $OctopusParameters["Template.Dependency.Approval"]
                 
                 function Get-OctopusUrl
                 {
@@ -722,16 +723,28 @@ step "check-dependencies" {
                     $dependencyResultList += $dependencyResult
                 }
                 
-                if ($allDependenciesSatisfied -eq $true)
+                if ($allDependenciesSatisfied -eq $false -and $parameterOlderDependencyAction -eq "Stop")
                 {
-                    Write-Highlight "All dependencies satisfy the minimum version requirements, you are clear to deploy the main project."
-                    exit 0
+                    Write-Highlight "One or more dependencies do not satisfy the version requirements.  Stopping the deployment as per the parameter configuration."
+                    exit 1
                 }
                 
-                if ($parameterOlderDependencyAction -eq "Stop")
+                $manualInterventionRequired = $false
+                if ($allDependenciesSatisfied -eq $false -and $parameterApprovalRequired -eq "Yes" )
                 {
-                    Write-Highlight "One or more dependencies do not satisfy the minimum version requirements.  Stopping the deployment as per the parameter configuration."
-                    exit 1
+                    Write-Highlight "One or more dependencies do not satisfy the version requirements.  Pausing the deployment for approval."
+                    $manualInterventionRequired = $true      
+                }
+                
+                $deployOlderVersions = $false
+                if ($allDependenciesSatisfied -eq $false -and $parameterOlderDependencyAction -eq "Deploy" )
+                {    
+                    $deployOlderVersions = $true      
+                }
+                
+                if ($allDependenciesSatisfied -eq $true)
+                {
+                   Write-Highlight "All dependencies satisfy the version requirements."
                 }
                 
                 $approvalResult = $approvalMessageList -join "`n"
@@ -743,6 +756,14 @@ step "check-dependencies" {
                 Write-Host "Adding DependencyResult with the value $dependencyResultAsString as an output variable"
                 Set-OctopusVariable -name "DependencyResult" -value $dependencyResultAsString
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.DependencyResult}"
+                
+                Write-Host "Adding ApprovalRequired with the value $manualInterventionRequired as an output variable"
+                Set-OctopusVariable -name "ApprovalRequired" -value $manualInterventionRequired
+                Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.ApprovalRequired}"
+                
+                Write-Host "Adding DeployDependencies with the value $deployOlderVersions as an output variable"
+                Set-OctopusVariable -name "DeployDependencies" -value $deployOlderVersions
+                Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.DeployDependencies}"
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
@@ -756,7 +777,7 @@ step "approve-dependency-result" {
     condition = "Variable"
     name = "Approve Dependency Result"
     properties = {
-        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{if Template.Dependency.Approval == \"Yes\"}True#{else}False#{/if}#{/unless}"
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.ProcessTemplate.Action[Check Dependencies].Output.ApprovalRequired}#{/unless}"
     }
 
     action {

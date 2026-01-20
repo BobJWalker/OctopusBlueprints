@@ -687,11 +687,11 @@ step "check-dependencies" {
                         $approvalMessage = $null
                         if ($null -ne $sourceVersionToDeploy)
                         {
-                            $approvalMessage = "Project $($dependencyResult.ProjectName) needs to deploy version $($sourceVersionToDeploy) to satisfy $($dependency.MinVersion)."    
+                            $approvalMessage = "Project $($dependency.ProjectName) needs to deploy version $($sourceVersionToDeploy) to satisfy $($dependency.MinVersion)."    
                         }        
                         else
                         {
-                            $approvalMessage = "Project $($dependencyResult.ProjectName) does not satisfy $($dependency.MinVersion) and we cannot find a minimum version ready to deploy."
+                            $approvalMessage = "Project $($dependency.ProjectName) does not satisfy $($dependency.MinVersion) and we cannot find a minimum version ready to deploy."
                         }
                         Write-Highlight $approvalMessage
                         $approvalMessageList += $approvalMessage
@@ -699,7 +699,7 @@ step "check-dependencies" {
                     }
                     else
                     {
-                        Write-Highlight "Project $($dependencyResult.ProjectName) is currently running $($deployedVersion) which satisfies $($dependency.MinVersion). No further action needed."
+                        Write-Highlight "Project $($dependency.ProjectName) is currently running $($deployedVersion) which satisfies $($dependency.MinVersion). No further action needed."
                     }
                 
                     $dependencyResult = @{
@@ -767,6 +767,7 @@ step "approve-dependency-result" {
                 One or more dependencies are out of date in #{Template.Environment.Name}.  The action is currently set to #{Template.Dependency.Action}
                 
                 Please approve the following before deploying:
+                
                 #{Octopus.ProcessTemplate.Action[Check Dependencies].Output.ApprovalMessages}
                 
                 EOT

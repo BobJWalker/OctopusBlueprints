@@ -33,27 +33,56 @@ parameter "Template.Dependency.Projects" {
             [
               {
                 "projectName": "Spear", # Required - the name of the project of the dependency.
-                "minVersion": "1.0.42", # Required - the minimum version required.  Can be a specific number or a wild card.
+                "minVersion": "1.0.42", # Required - the minimum version required.  See below for version information.
                 "deployGroup": 1, # Optional- indicates which projects can be deployed concurrently vs. which ones that cannot.  If omitted all dependencies are deployed sequentially.    
                 "spaceName": "Default", #Optional - uses the current space if not provided
                 "tenantName": null #Optional - the name of the tenant to deploy.  If not specified will use the current tenant being deployed (if doing a tenanted deployment)
               },
               {
-                "minVersion": "2.4.*",
+                "minVersion": "^2.4.0",
                 "spaceName": "Default",
                 "projectName": "TAKA",
                 "deployGroup": 1
               },
               {
-                "minVersion": "4.*",
+                "minVersion": "4.x",
                 "spaceName": "Default",
                 "projectName": "TAWA",
                 "deployGroup": 2
               }
             ]
             ```
+            
+            The minimum version follows Node's versioning scheme (with four numbers instead of three).
+            
+            - Exact version: 1.2.3.4
+            - Caret range: ^1.2.3.4
+            - Tilde range: ~1.2.3.4
+            - Major wildcard: 2.x
+            
             EOT
     label = "Project Dependencies"
+}
+
+parameter "Template.Dependency.Action" {
+    display_settings = {
+        Octopus.ControlType = "Select"
+        Octopus.SelectOptions = <<-EOT
+            Stop|Stop
+            Continue|Continue
+            Deploy|Deploy
+            EOT
+    }
+    help_text = <<-EOT
+            **Required** What the template should do if the dependency check fails.
+            
+            - **Stop:** If one or more of the dependency checks fail it will stop and fail the deployment.
+            - **Continue:** Will proceed with the deployment even if the dependency check fails.  Will not attempt to deploy any dependent projects.
+            - **Deploy:** Will trigger the deployments for the latest version that match the minVersion in the dependency to the target environment.  
+            EOT
+    label = "Dependency Action"
+
+    value "Stop" {}
 }
 
 parameter "Template.Environment.Name" {
@@ -64,29 +93,6 @@ parameter "Template.Environment.Name" {
     label = "Target Environment"
 
     value "#{Octopus.Environment.Name}" {}
-}
-
-parameter "Template.Dependency.Action" {
-    display_settings = {
-        Octopus.ControlType = "Select"
-        Octopus.SelectOptions = <<-EOT
-            Stop|Stop and Fail Deployment
-            Continue|Continue deployment
-            DeployLatest|Deploy latest version of dependencies to environment
-            DeployMatching|Deploy latest matching version of dependencies to environment
-            EOT
-    }
-    help_text = <<-EOT
-            **Required** What the template should do if the dependency check fails.
-            
-            - **Stop and Fail Deployment:** If one or more of the dependency checks fail it will stop and fail the deployment.
-            - **Continue without requiring approval:** Will proceed with the deployment even if the dependency check fails.
-            - **Deploy latest version of dependencies to environment:** Will trigger the deployments for any dependencies to the target environment.  If dependency requires `4.5.*` in prod and latest is `5.1.2` in test, it will deploy `5.1.2`
-            - **Deploy latest matching version of dependencies to environment:** Will trigger the deployment of the latest matching dependency to the target environment.  If dependency requires `4.5.*` in prod and latest is `5.1.2` and `4.5.12` in test, it will deploy `4.5.12`
-            EOT
-    label = "Dependency Action"
-
-    value "Stop" {}
 }
 
 parameter "Template.Dependency.Approval" {
@@ -138,8 +144,7 @@ step "check-dependencies" {
                 $parameterTargetEnvironmentName = $OctopusParameters["Template.Environment.Name"] # Target environment for deployment
                 $parameterTargetTenantName = $OctopusParameters["Template.Tenant.Name"] # Target Tenant for deployment (when doing multi-tenancy)
                 $parameterSpaceName = $OctopusParameters["Octopus.Space.Name"] # Space name to use for API calls, if not specified will attempt to look up based on space name
-                $parameterMinAvailableTaskCap = "2" # Minimum number of available deployment tasks required to proceed with deployment if deploying out of date dependencies
-                $parameterDeploymentTimeoutMinutes = 30 # Timeout for each deployment in minutes
+                $stepName = $OctopusParameters["Octopus.Action.StepName"]
                 
                 function Get-OctopusUrl
                 {
@@ -358,17 +363,140 @@ step "check-dependencies" {
                     return $orderedTaskList
                 }
                 
-                function Get-MatchingDeployedVersion
+                function Get-ProjectChannelsWithDestinationEnvironment
                 {
                     param(
-                        $dependency,
+                        $project,
                         $environment,
-                        $space,
+                        $spaceId,
                         $octopusUrl,
                         $octopusApiKey
                     )
                 
-                    $deploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $null -environmentList @($environment.Id) -octopusUrl $octopusUrl -octopusApiKey $octopusApiKey
+                    $channelList = Get-ListFromOctopusApi -octopusUrl $octopusUrl -endPoint "projects/$($project.Id)/channels" -spaceId $spaceId -apiKey $octopusApiKey -method "GET" -propertyName "Items"
+                    $matchingChannels = @()
+                
+                    foreach ($channel in $channelList)
+                    {
+                        if ([string]::IsNullOrWhiteSpace($channel.ParentEnvironmentId) -eq $false)
+                        {
+                            Write-Verbose "Channel $($channel.Name) is tied to an ephemeral environment, skipping as we are looking for channels that include the target environment"
+                            continue
+                        }
+                
+                        if ($null -eq $channel.LifecycleId)
+                        {
+                            Write-Verbose "Channel $($channel.Name) does not have a lifecycle associated with it, using the project lifecycle"
+                            $lifecyclePhases = Get-ListFromOctopusApi -octopusUrl $octopusUrl -endPoint "lifecycles/$($project.LifecycleId)/preview" -spaceId $spaceId -apiKey $octopusApiKey -method "GET" -propertyName "Phases"
+                        }
+                        else
+                        {
+                            Write-Verbose "Channel $($channel.Name) has a lifecycle associated with it, using that lifecycle"
+                            $lifecyclePhases = Get-ListFromOctopusApi -octopusUrl $octopusUrl -endPoint "lifecycles/$($channel.LifecycleId)/preview" -spaceId $spaceId -apiKey $octopusApiKey -method "GET" -propertyName "Phases"
+                        }
+                
+                        Write-Verbose "Checking if channel $($channel.Name) contains the target environment $($environment.Name)"
+                        $channelContainsDestinationEnvironment = $false
+                        foreach ($phase in $lifecyclePhases)
+                        {
+                            if ($phase.AutomaticDeploymentTargets -contains $environment.Id)
+                            {
+                                $channelContainsDestinationEnvironment = $true
+                                break
+                            }
+                
+                            if ($phase.OptionalDeploymentTargets -contains $environment.Id)
+                            {
+                                $channelContainsDestinationEnvironment = $true
+                                break
+                            }
+                        }
+                
+                        if ($channelContainsDestinationEnvironment -eq $true)
+                        {
+                            Write-Host "Channel $($channel.Name) contains the target environment $($environment.Name)"
+                            $matchingChannels += @{
+                                "Channel" = $channel
+                                "LifecyclePhases" = $lifecyclePhases
+                            }             
+                        }
+                    }
+                
+                    if ($matchingChannels.Count -eq 0)
+                    {
+                        Write-Error "Unable to find any channels for project $($dependency.ProjectName) that can deploy to environment $($environment.Name).  Exiting with an exit code of 1."
+                        exit 1
+                    }
+                
+                    return $matchingChannels
+                }
+                
+                function Get-SourceEnvironmentsFromPhase
+                {
+                    param(
+                        $matchingChannels,
+                        $environment
+                    )
+                
+                    $sourceEnvironments = @()    
+                
+                    foreach ($channelInfo in $matchingChannels)
+                    {
+                        $lifecyclePhases = $channelInfo.LifecyclePhases
+                        $lifecyclePhaseIndex = -1
+                
+                        for ($i = 0; $i -lt $lifecyclePhases.Count; $i++)
+                        {
+                            $phase = $lifecyclePhases[$i]
+                            if ($phase.AutomaticDeploymentTargets -contains $environment.Id -or $phase.OptionalDeploymentTargets -contains $environment.Id)
+                            {
+                                $lifecyclePhaseIndex = $i
+                                break
+                            }
+                        }
+                
+                        for ($i = $lifecyclePhaseIndex - 1; $i -ge 0; $i--)
+                        {
+                            $previousLifecyclePhase = $lifecyclePhases[$lifecyclePhaseIndex - 1]      
+                            foreach ($environmentId in $previousLifecyclePhase.AutomaticDeploymentTargets)
+                            {
+                                if ($sourceEnvironments -notcontains $environmentId)
+                                {
+                                    Write-Verbose "Adding $environmentId to the source environments because it is a previous environment in $($channelInfo.Channel.Name)"
+                                    $sourceEnvironments += $environmentId
+                                }
+                            }
+                
+                            foreach ($environmentId in $previousLifecyclePhase.OptionalDeploymentTargets)
+                            {
+                                if ($sourceEnvironments -notcontains $environmentId)
+                                {
+                                    Write-Verbose "Adding $environmentId to the source environments because it is a previous environment in $($channelInfo.Channel.Name)"
+                                    $sourceEnvironments += $environmentId
+                                }
+                            }
+                
+                            if ($previousLifecyclePhase.IsOptionalPhase -eq $false)
+                            {
+                                Write-Verbose "The phase $($previousLifecyclePhase.Name) is required, stopping the search for previous phases."
+                                break
+                            }
+                        }       
+                    }  
+                
+                    return ,$sourceEnvironments
+                }
+                
+                
+                function Get-MatchingDeployedVersion
+                {
+                    param(
+                        $deploymentTasks,
+                        $dependency,        
+                        $space,
+                        $octopusUrl,
+                        $octopusApiKey
+                    )    
                     
                     foreach ($task in $deploymentTasks)
                     {
@@ -393,34 +521,96 @@ step "check-dependencies" {
                         $versionPatternToCheckAgainst
                     )
                 
-                    $localVersionToCheck = Remove-PreReleaseTag -version $versionToCheck
-                    $localVersion = [version]$localVersionToCheck
+                    $localVersionToCheck = Remove-PreReleaseTag -version $versionToCheck    
+                    $localVersion = Convert-Version $localVersionToCheck
                 
-                    $localPatternToCheckAgainst = Remove-PreReleaseTag -version $versionPatternToCheckAgainst
-                    $localVersionPatternToCheckAgainstArray = $localPatternToCheckAgainst.Split(".")    
+                    $localPatternToCheckAgainst = Remove-PreReleaseTag -version $versionPatternToCheckAgainst            
                 
-                    #Test for the simple wildcard pattern of major.* - in this case we only need to worry if the major version has been deployed.
-                    if ($localVersionPatternToCheckAgainstArray.Length -eq 2 -and $localVersion.Major -eq [int]$localVersionPatternToCheckAgainstArray[0] -and (Test-NumberIsGreater -versionNumber $localVersion.Minor -versionPatternNumber $localVersionPatternToCheckAgainstArray[1]))
-                    {
-                        Write-Host "The version $localVersion satisfies the pattern $versionPatternToCheckAgainst"
-                        return $true
+                    # Major wildcard (e.g. 2.x)
+                    if ($localPatternToCheckAgainst -match '^(\d+)\.x$') {        
+                        $doesMatch = ($localVersion[0] -eq [int]$matches[1])
+                
+                        Write-MatchMessage -doesMatch $doesMatch -version $localVersionToCheck -pattern $versionPatternToCheckAgainst
+                
+                        return $doesMatch
                     }
-                    
-                    $localPatternVersion = [version]$localPatternToCheckAgainst.Replace(".*", "")
                 
-                    if ($localVersion -gt $localPatternVersion)
-                    {
-                        Write-Host "Version pattern satisfied version $localVersion is greater than the pattern version $localPatternVersion"
-                        return $true
+                    # Exact version
+                    if ($localPatternToCheckAgainst -match '^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$') {
+                        $p = Convert-Version $localPatternToCheckAgainst
+                        $doesMatch = ((Compare-Version $localVersion $p) -eq 0)
+                
+                        Write-MatchMessage -doesMatch $doesMatch -version $localVersionToCheck -pattern $versionPatternToCheckAgainst
+                
+                        return $doesMatch                 
                     }
-                    elseif ($localVersion -eq $localPatternVersion)
-                    {
-                        Write-Host "Version pattern satisfied version $localVersion is equal to the pattern version $localPatternVersion"
-                        return $true
-                    }    
                 
-                    Write-Host "Version pattern failed - version $localVersion is less than the pattern version $localPatternVersion"
+                    # Caret range (e.g. ^1.2.3 or ^1.2.3.4)
+                    if ($localPatternToCheckAgainst -match '^\^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$') {
+                        $p = Convert-Version ($localPatternToCheckAgainst.Substring(1))
+                        $doesMatch = ($localVersion[0] -eq $p[0] -and ((Compare-Version $localVersion $p) -ge 0))
+                
+                        Write-MatchMessage -doesMatch $doesMatch -version $localVersionToCheck -pattern $versionPatternToCheckAgainst
+                
+                        return $doesMatch
+                    }
+                
+                    # Tilde range (e.g. ~1.2.3 or ~1.2.3.4)
+                    if ($localPatternToCheckAgainst -match '^~(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$') {
+                        $p = Convert-Version ($localPatternToCheckAgainst.Substring(1))
+                        $doesMatch = ($localVersion[0] -eq $p[0] -and $localVersion[1] -eq $p[1] -and (Compare-Version $localVersion $p) -ge 0)
+                
+                        Write-MatchMessage -doesMatch $doesMatch -version $localVersionToCheck -pattern $versionPatternToCheckAgainst
+                
+                        return $doesMatch
+                    }
+                
+                    Write-Host "The version pattern $versionPatternToCheckAgainst is not recognized, unable to compare versions."
                     return $false
+                }
+                
+                function Convert-Version 
+                {
+                    param ($v)
+                
+                    if ($v -notmatch '^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$') {
+                        throw "Invalid version format: $v"
+                    }
+                
+                    return @(
+                        [int]$matches[1],
+                        [int]$matches[2],
+                        [int]$matches[3],
+                        [int]($matches[4] ?? 0)
+                    )
+                }
+                
+                function Compare-Version {
+                    param ($a, $b)
+                
+                    for ($i = 0; $i -lt 4; $i++) {
+                        if ($a[$i] -gt $b[$i]) { return 1 }
+                        if ($a[$i] -lt $b[$i]) { return -1 }
+                    }
+                
+                    return 0
+                }
+                
+                function Write-MatchMessage {
+                    param(
+                        $doesMatch,
+                        $version,
+                        $pattern
+                    )
+                
+                    if ($doesMatch)
+                    {
+                        Write-Host "The version $version satisfies the pattern $pattern"
+                    }
+                    else
+                    {
+                        Write-Host "The version $version does not satisfy the pattern $pattern"
+                    }
                 }
                 
                 function Test-NumberIsGreater
@@ -472,6 +662,7 @@ step "check-dependencies" {
                 $defaultTenant = Get-OctopusItemByName -itemName $parameterTenantName -itemType "Tenant" -endpoint "tenants" -defaultValue $null -spaceId $defaultSpace.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 
                 $dependencyResultList = @()
+                $approvalMessageList = @()
                 $allDependenciesSatisfied = $true
                 foreach ($dependency in $dependencyList)
                 {
@@ -480,40 +671,60 @@ step "check-dependencies" {
                     $project = Get-OctopusItemByName -itemName $dependency.ProjectName -itemType "Project" -endpoint "projects" -defaultValue $null -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $tenant = Get-OctopusItemByName -itemName $dependency.TenantName -itemType "Tenant" -endpoint "tenants" -defaultValue $defaultTenant -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 
-                    $deploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $null -environmentList @($environment.Id) -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                    $deployedVersion = Get-MatchingDeployedVersion -dependency $dependency -environment $environment -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey    
+                    $deploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList @($environment.Id) -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $deployedVersion = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $deploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $sourceVersionToDeploy = "N/A"
                 
                     if ($null -eq $deployedVersion)
                     {
                         $allDependenciesSatisfied = $false
-                        Write-Host "Unable to find a deployment of $($dependency.ProjectName) that satisfies the minimum version requirement of $($dependency.MinVersion) - you'll need to deploy the dependencies before deploying the main project."
+                
+                        $matchingChannels = Get-ProjectChannelsWithDestinationEnvironment -project $project -environment $environment -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                        $sourceEnvironments = Get-SourceEnvironmentsFromPhase -matchingChannels $matchingChannels -environment $environment
+                        $sourceDeploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                        $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                
+                        $approvalMessage = $null
+                        if ($null -ne $sourceVersionToDeploy)
+                        {
+                            $approvalMessage = "Project $($dependencyResult.ProjectName) needs to deploy version $($dependencyResult.VersionToDeploy) to satisfy the minimum version requirement of $($dependencyResult.MinVersion)."    
+                        }        
+                        else
+                        {
+                            $approvalMessage = "Project $($dependencyResult.ProjectName) does not satisfy the minimum version requirement of $($dependencyResult.MinVersion) and we cannot find a minimum version ready to deploy."
+                        }
+                        Write-Highlight $approvalMessage
+                        $approvalMessageList += $approvalMessage
+                        
+                    }
+                    else
+                    {
+                        Write-Highlight "Project $($dependencyResult.ProjectName) is currently running $($dependencyResult.DeployedVersion). No further action needed."
                     }
                 
-                    $dependencyResultList += @{
+                    $dependencyResult = @{
                         "ProjectName" = $dependency.ProjectName
+                        "ProjectId" = $project.Id        
+                        "SpaceName" = $space.Name
+                        "SpaceId" = $space.Id
                         "MinVersion" = $dependency.MinVersion
                         "DeployedVersion" = $deployedVersion
-                        "DeployGroup" = $dependency.DeployGroup
-                        "Project" = $project
-                        "Space" = $space
+                        "DeployGroup" = $dependency.DeployGroup                
+                        "VersionToDeploy" = $sourceVersionToDeploy
                     }
-                }
                 
-                foreach ($dependencyResult in $dependencyResultList)
-                {
-                    if ($null -eq $dependencyResult.DeployedVersion)
+                    if ($null -ne $tenant)
                     {
-                        Write-Highlight "Project $($dependencyResult.ProjectName) does not satisfy the minimum version requirement of $($dependencyResult.MinVersion)."
+                        $dependencyResult["TenantId"] = $tenant.Id
+                        $dependencyResult["TenantName"] = $tenant.Name
                     }
-                    else 
-                    {
-                        Write-Highlight "Project $($dependencyResult.ProjectName) is currently running $($dependencyResult.DeployedVersion) which satisfies the minimum version requirement of $($dependencyResult.MinVersion). No further action needed."
-                    }
+                
+                    $dependencyResultList += $dependencyResult
                 }
                 
                 if ($allDependenciesSatisfied -eq $true)
                 {
-                    Write-Highlight "All dependencies satisfy the minimum version requirements, you are clear to deploy this project."
+                    Write-Highlight "All dependencies satisfy the minimum version requirements, you are clear to deploy the main project."
                     exit 0
                 }
                 
@@ -522,6 +733,16 @@ step "check-dependencies" {
                     Write-Highlight "One or more dependencies do not satisfy the minimum version requirements.  Stopping the deployment as per the parameter configuration."
                     exit 1
                 }
+                
+                $approvalResult = $approvalMessageList -join "`n"
+                Write-Host "Adding ApprovalMessages with the value $approvalResult as an output variable"
+                Set-OctopusVariable -name "ApprovalMessages" -value $approvalResult
+                Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.ApprovalMessages}"
+                
+                $dependencyResultAsString = ConvertTo-Json $dependencyResult
+                Write-Host "Adding DependencyResult with the value $dependencyResultAsString as an output variable"
+                Set-OctopusVariable -name "DependencyResult" -value $dependencyResultAsString
+                Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.DependencyResult}"
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
@@ -542,7 +763,13 @@ step "approve-dependency-result" {
         action_type = "Octopus.Manual"
         properties = {
             Octopus.Action.Manual.BlockConcurrentDeployments = "True"
-            Octopus.Action.Manual.Instructions = "One or more dependencies are out of date in #{Template.Environment.Name}.  Please approve the action #{Template.Dependency.Action} before proceeding."
+            Octopus.Action.Manual.Instructions = <<-EOT
+                One or more dependencies are out of date in #{Template.Environment.Name}.  The action is currently set to #{Template.Dependency.Action}
+                
+                Please approve the following before deploying:
+                #{Octopus.ProcessTemplate.Action[Check Dependencies].Output.ApprovalMessages}
+                
+                EOT
             Octopus.Action.Manual.ResponsibleTeamIds = "#{Template.Approval.Teams}"
         }
     }

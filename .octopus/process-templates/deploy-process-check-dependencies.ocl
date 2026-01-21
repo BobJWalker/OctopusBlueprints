@@ -32,11 +32,11 @@ parameter "Template.Dependency.Projects" {
             ```
             [
               {
-                "projectName": "Spear", # Required - the name of the project of the dependency.
-                "minVersion": "1.0.42", # Required - the minimum version required.  See below for version information.
-                "deployGroup": 1, # Optional- indicates which projects can be deployed concurrently vs. which ones that cannot.  If omitted all dependencies are deployed sequentially.    
-                "spaceName": "Default", #Optional - uses the current space if not provided
-                "tenantName": null #Optional - the name of the tenant to deploy.  If not specified will use the current tenant being deployed (if doing a tenanted deployment)
+                "projectName": "Spear", 
+                "minVersion": "1.0.42", 
+                "deployGroup": 1,    
+                "spaceName": "Default",
+                "tenantName": null 
               },
               {
                 "minVersion": "^2.4.0",
@@ -53,12 +53,23 @@ parameter "Template.Dependency.Projects" {
             ]
             ```
             
-            The minimum version follows Node's versioning scheme (with four numbers instead of three).
+            The properties to note are:
+            
+            - projectName - **Required** the name of the project of the dependency.
+            - minVersion - **Required** the minimum version required.  See below for version information.
+            - deployGroup - **Optional** indicates which projects can be deployed concurrently vs. which ones that cannot.  If omitted all dependencies are deployed sequentially.
+            - spaceName - **Optional** uses the current space if not provided.
+            - tenantName - **Optional** the name of the tenant to deploy.  If not specified will use the current tenant being deployed (if doing a tenanted deployment)
+            
+            The minimum version follows Node's versioning scheme.  But it includes support for four digits (1.2.3.4) as well as three (1.2.3).  Any pre-release tags are removed prior to comparison.
             
             - Exact version: 1.2.3.4
-            - Caret range: ^1.2.3.4
-            - Tilde range: ~1.2.3.4
-            - Major wildcard: 2.x
+            - Caret range: ^1.2.3.4 - Allows minor, patch, and build updates, locking the major version.
+            - Tilde range: ~1.2.3.4 - Allows patch and build updates only, locking the major and minor versions.
+            - Major wildcard: 2.x - Allows any version or any version within a major range.
+            - Latest: * - Matches on any version, but will make sure the latest version is deployed.
+            
+            **Important** - the template will deploy the _latest_ version found in the source environment that matches the pattern (if it is found).  For example, if test is 2.4.3 and production is 2.4.1 and the pattern is ~2.4.0 then it will ask to deploy 2.4.3 to production.
             
             EOT
     label = "Project Dependencies"
@@ -504,7 +515,7 @@ step "check-dependencies" {
                         $deploymentInformation = Invoke-OctopusApi -octopusUrl $parameterOctopusInstance -endPoint "deployments/$($task.Arguments.DeploymentId)" -spaceId $space.Id -apiKey $parameterOctopusAPIKey -method "GET"
                         $releaseInformation = Invoke-OctopusApi -octopusUrl $parameterOctopusInstance -endPoint "releases/$($deploymentInformation.ReleaseId)" -spaceId $space.Id -apiKey $parameterOctopusAPIKey -method "GET"
                 
-                        if (Test-VersionNewerThanPattern -versionToCheck $releaseInformation.Version -versionPatternToCheckAgainst $dependency.MinVersion)
+                        if (Test-VersionMatchesPattern -versionToCheck $releaseInformation.Version -versionPatternToCheckAgainst $dependency.MinVersion)
                         {
                             Write-Host "Found a deployment of $($dependency.ProjectName) with version $($releaseInformation.Version) which satisfies the minimum version requirement of $($dependency.MinVersion)"
                             return $releaseInformation.Version
@@ -515,12 +526,18 @@ step "check-dependencies" {
                     return $null
                 }
                 
-                function Test-VersionNewerThanPattern
+                function Test-VersionMatchesPattern
                 {
                     param(
                         $versionToCheck,
                         $versionPatternToCheckAgainst
                     )
+                
+                    if ($versionPatternToCheckAgainst -eq "*")
+                    {
+                        Write-Host "The version pattern is *, all versions satisfy this pattern"
+                        return $true
+                    }
                 
                     $localVersionToCheck = Remove-PreReleaseTag -version $versionToCheck    
                     $localVersion = Convert-Version $localVersionToCheck
@@ -568,6 +585,44 @@ step "check-dependencies" {
                 
                     Write-Host "The version pattern $versionPatternToCheckAgainst is not recognized, unable to compare versions."
                     return $false
+                }
+                
+                function Test-VersionIsNewer{
+                    param(
+                        $targetEnvironmentVersion,
+                        $sourceEnvironmentVersion
+                    )
+                
+                    if ($null -eq $sourceEnvironmentVersion)
+                    {
+                        Write-Host "The source environment does not have a version matching the pattern deployed, therefore it cannot be newer than the target environment."
+                        return $false
+                    }
+                
+                    if ($null -eq $targetEnvironmentVersion -and $null -ne $sourceEnvironmentVersion)
+                    {
+                        Write-Host "The target environment does not have does not have a version matching the pattern deployed while the source environment does.  Therefore the source environment version $sourceEnvironmentVersion is considered newer."
+                        return $true
+                    }    
+                
+                    $localTargetEnvVersionToCheck = Remove-PreReleaseTag -version $targetEnvironmentVersion    
+                    $localTargetEnvVersion = Convert-Version $localTargetEnvVersionToCheck
+                
+                    $localSourceEnvVersionToCheck = Remove-PreReleaseTag -version $sourceEnvironmentVersion    
+                    $localSourceEnvVersion = Convert-Version $localSourceEnvVersionToCheck
+                
+                    $isNewer = (Compare-Version $localSourceEnvVersion $localTargetEnvVersion) -gt 0
+                
+                    if ($isNewer)
+                    {
+                        Write-Host "The source environment version $sourceEnvironmentVersion is newer than the target environment version $targetEnvironmentVersion"
+                    }
+                    else
+                    {
+                        Write-Host "The source environment version $sourceEnvironmentVersion is NOT newer than the target environment version $targetEnvironmentVersion"
+                    }
+                
+                    return $isNewer
                 }
                 
                 function Convert-Version 
@@ -673,34 +728,38 @@ step "check-dependencies" {
                     $tenant = Get-OctopusItemByName -itemName $dependency.TenantName -itemType "Tenant" -endpoint "tenants" -defaultValue $defaultTenant -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 
                     $deploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList @($environment.Id) -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                    $deployedVersion = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $deploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                    $sourceVersionToDeploy = "N/A"
+                    $deployedVersion = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $deploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey  
+                    
+                    $matchingChannels = Get-ProjectChannelsWithDestinationEnvironment -project $project -environment $environment -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $sourceEnvironments = Get-SourceEnvironmentsFromPhase -matchingChannels $matchingChannels -environment $environment
+                    $sourceDeploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 
-                    if ($null -eq $deployedVersion)
+                    if ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy)
                     {
                         $allDependenciesSatisfied = $false
                 
-                        $matchingChannels = Get-ProjectChannelsWithDestinationEnvironment -project $project -environment $environment -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                        $sourceEnvironments = Get-SourceEnvironmentsFromPhase -matchingChannels $matchingChannels -environment $environment
-                        $sourceDeploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                        $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                
-                        $approvalMessage = $null
-                        if ($null -ne $sourceVersionToDeploy)
-                        {
-                            $approvalMessage = "Project $($dependency.ProjectName) needs to deploy version $($sourceVersionToDeploy) to satisfy $($dependency.MinVersion)."    
-                        }        
-                        else
-                        {
-                            $approvalMessage = "Project $($dependency.ProjectName) does not satisfy $($dependency.MinVersion) and we cannot find a minimum version ready to deploy."
-                        }
+                        $approvalMessage = "Project $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.MinVersion). It needs to deploy $($sourceVersionToDeploy)."
                         Write-Highlight $approvalMessage
                         $approvalMessageList += $approvalMessage
                         
                     }
+                    if ($null -ne $sourceVersionToDeploy -and (Test-VersionIsNewer -targetEnvironmentVersion $deployedVersion -sourceEnvironmentVersion $sourceVersionToDeploy))
+                    {
+                        $allDependenciesSatisfied = $false        
+                
+                        $approvalMessage = "Project $($dependency.ProjectName) is currently an older version $($deployedVersion) in $($environment.Name) that still matches $($dependency.MinVersion). But $($sourceVersionToDeploy) is newer and matches $($dependency.MinVersion) so it should be deployed."        
+                        Write-Highlight $approvalMessage
+                        $approvalMessageList += $approvalMessage        
+                    }
                     else
                     {
-                        Write-Highlight "Project $($dependency.ProjectName) is currently running $($deployedVersion) which satisfies $($dependency.MinVersion). No further action needed."
+                        Write-Highlight "Project $($dependency.ProjectName) is currently running $($deployedVersion) which satisfies $($dependency.MinVersion) and is the latest version. No further action needed."
+                    }
+                
+                    if ($null -eq $sourceVersionToDeploy)
+                    {
+                        $sourceVersionToDeploy = "N/A"
                     }
                 
                     $dependencyResult = @{

@@ -499,7 +499,8 @@ step "check-dependencies" {
                         $environment
                     )
                 
-                    $sourceEnvironments = @()    
+                    $sourceEnvironments = @()  
+                    Write-Verbose "Looping through $($matchingChannels.Count) to find the previous environment."
                 
                     foreach ($channelInfo in $matchingChannels)
                     {
@@ -511,6 +512,7 @@ step "check-dependencies" {
                             $phase = $lifecyclePhases[$i]
                             if ($phase.AutomaticDeploymentTargets -contains $environment.Id -or $phase.OptionalDeploymentTargets -contains $environment.Id)
                             {
+                                Write-Verbose "The phase $i has the target environment $($environment.Name)"
                                 $lifecyclePhaseIndex = $i
                                 break
                             }
@@ -840,6 +842,10 @@ step "check-dependencies" {
                         $deploymentIsNeeded = $true
                         $reason = "$($dependency.ProjectName) has version $($sourceVersionToDeploy) which matches $($dependency.versionPattern) in a previous environment that is newer than $($deployedVersion) in $($environment.Name).  The dependency action is set to Deploy Newer Matching and approval is not requested, so $($sourceVersionToDeploy) will be deployed without approval."
                     }  
+                    elseif ($null -ne $deployedVersion -and $null -eq $sourceVersionToDeploy)
+                    {
+                        $reason = "$($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  A previous environment was not detected (likely due to being first in the lifecycle).  All conditions are met.  No deployment needed for $($dependency.ProjectName)."
+                    }
                     else
                     {
                         Write-Error "Unhandled version comparison case for dependency $($dependency.ProjectName).  Exiting with an exit code of 1."

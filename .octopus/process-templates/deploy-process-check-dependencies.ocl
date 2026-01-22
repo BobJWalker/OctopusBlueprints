@@ -182,6 +182,8 @@ step "check-dependencies" {
                 Write-Host "Target Tenant Name: $parameterTargetTenantName"
                 Write-Host "Target Space Name: $parameterSpaceName"
                 
+                $cachedResults = @{}
+                
                 function Get-OctopusUrl
                 {
                     param (
@@ -233,15 +235,38 @@ step "check-dependencies" {
                 
                         if ($null -eq $item)
                         {
+                             if ($method.ToUpper().Trim() -eq "GET")
+                             {
+                                Write-Verbose "Checking to see if $url is already in the cache"
+                                if ($cachedResults.ContainsKey($url) -eq $true)
+                                {
+                                    Write-Verbose "$url is already in the cache, returning the result"
+                                    return $cachedResults[$url]
+                                }
+                            }
+                            else
+                            {
+                                Write-Verbose "Ignoring cache because the method is $method."    
+                            }
+                
                             Write-Verbose "No data to post or put, calling bog standard invoke-restmethod for $url"
-                            return Invoke-RestMethod -Method $method -Uri $url -Headers @{"X-Octopus-ApiKey" = "$ApiKey" } -ContentType 'application/json; charset=utf-8' -TimeoutSec 60
+                            $result = Invoke-RestMethod -Method $method -Uri $url -Headers @{"X-Octopus-ApiKey" = "$ApiKey" } -ContentType 'application/json; charset=utf-8' -TimeoutSec 60
+                
+                            if ($cachedResults.ContainsKey($url) -eq $true)
+                            {
+                                $cachedResults.Remove($url)
+                            }
+                            Write-Verbose "Adding $url to the cache"
+                            $cachedResults.add($url, $result)
+                
+                            return $result
                         }
                 
                         $body = $item | ConvertTo-Json -Depth 10
                         Write-Verbose $body
                 
                         Write-Verbose "Invoking $method $url"
-                        return Invoke-RestMethod -Method $method -Uri $url -Headers @{"X-Octopus-ApiKey" = "$ApiKey" } -Body $body -ContentType 'application/json; charset=utf-8' -TimeoutSec 60
+                        return Invoke-RestMethod -Method $method -Uri $url -Headers @{"X-Octopus-ApiKey" = "$ApiKey" } -Body $body -ContentType 'application/json; charset=utf-8' -TimeoutSec 60    
                     }
                     catch [System.TimeoutException]
                     {        
@@ -542,12 +567,15 @@ step "check-dependencies" {
                         if (Test-VersionMatchesPattern -versionToCheck $releaseInformation.Version -versionPatternToCheckAgainst $dependency.versionPattern)
                         {
                             Write-Host "Found a deployment of $($dependency.ProjectName) with version $($releaseInformation.Version) which satisfies the minimum version requirement of $($dependency.versionPattern)"
-                            return $releaseInformation.Version
+                            return $releaseInformation
                             break
                         }
                     }
                 
-                    return $null
+                    return return @{ 
+                        "Version" = $null
+                        "Id" = $null
+                    }
                 }
                 
                 function Test-VersionMatchesPattern
@@ -850,7 +878,7 @@ step "check-dependencies" {
                     $sourceDeploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 
-                    $dependencyCompareResult = Get-VersionCompareResult -deployedVersion $deployedVersion -sourceVersionToDeploy $sourceVersionToDeploy -dependency $dependency -environment $environment -dependencyAction $parameterOlderDependencyAction -approvalRequested $parameterApprovalRequested
+                    $dependencyCompareResult = Get-VersionCompareResult -deployedVersion $deployedVersion.Version -sourceVersionToDeploy $sourceVersionToDeploy.Version -dependency $dependency -environment $environment -dependencyAction $parameterOlderDependencyAction -approvalRequested $parameterApprovalRequested
                 
                     Write-Highlight "$($dependencyCompareResult.Reason)"
                     
@@ -870,7 +898,7 @@ step "check-dependencies" {
                         $approvalMessageList += $dependencyCompareResult.Reason
                     }
                 
-                    if ($null -eq $sourceVersionToDeploy)
+                    if ($null -eq $sourceVersionToDeploy.Version)
                     {
                         $sourceVersionToDeploy = "N/A"
                     }
@@ -880,10 +908,13 @@ step "check-dependencies" {
                         "ProjectId" = $project.Id        
                         "SpaceName" = $space.Name
                         "SpaceId" = $space.Id
-                        "versionPattern" = $dependency.VersionPattern
-                        "DeployedVersion" = $deployedVersion
+                        "VersionPattern" = $dependency.VersionPattern
+                        "DeployedVersion" = $deployedVersion.Version        
+                        "DeployedReleaseId" = $deployedVersion.Id
                         "DeployGroup" = $dependency.DeployGroup                
-                        "VersionToDeploy" = $sourceVersionToDeploy
+                        "VersionToDeploy" = $sourceVersionToDeploy.Version
+                        "ReleaseIdToDeploy" = $sourceVersionToDeploy.Id
+                        "DeploymentIsNeeded" = $dependencyCompareResult.DeploymentIsNeeded
                     }
                 
                     if ($null -ne $tenant)
@@ -915,20 +946,20 @@ step "check-dependencies" {
                 }
                 
                 $approvalResult = $approvalMessageList -join "`n"
-                Write-Host "Adding ApprovalMessages with the value $approvalResult as an output variable"
+                Write-Host "Adding ApprovalMessages as an output variable with the value $approvalResult"
                 Set-OctopusVariable -name "ApprovalMessages" -value $approvalResult
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.ApprovalMessages}"
                 
                 $dependencyResultAsString = ConvertTo-Json $dependencyResult
-                Write-Host "Adding DependencyResult with the value $dependencyResultAsString as an output variable"
+                Write-Host "Adding DependencyResult as an output variable with the value $dependencyResultAsString"
                 Set-OctopusVariable -name "DependencyResult" -value $dependencyResultAsString
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.DependencyResult}"
                 
-                Write-Host "Adding ApprovalRequired with the value $requireManualIntervention as an output variable"
+                Write-Host "Adding ApprovalRequired as an output variable with the value $requireManualIntervention"
                 Set-OctopusVariable -name "ApprovalRequired" -value $requireManualIntervention
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.ApprovalRequired}"
                 
-                Write-Host "Adding DeployDependencies with the value $requiredDeployment as an output variable"
+                Write-Host "Adding DeployDependencies as an output variable with the value $requiredDeployment"
                 Set-OctopusVariable -name "DeployDependencies" -value $requiredDeployment
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.DeployDependencies}"
                 EOT

@@ -1,6 +1,11 @@
 name = "Deploy Process - Check Dependencies"
 description = "A process template that will ensure all the required dependent projects are deployed."
 
+icon {
+    color = "#1A77CA"
+    id = "binoculars"
+}
+
 parameter "Template.Worker.Pool" {
     display_settings = {
         Octopus.ControlType = "WorkerPool"
@@ -39,13 +44,13 @@ parameter "Template.Dependency.Projects" {
                 "tenantName": null 
               },
               {
-                "versionPattern": "^2.4.0",
+                "versionPattern": "~2.4.0",
                 "spaceName": "Default",
                 "projectName": "TAKA",
                 "deployGroup": 1
               },
               {
-                "versionPattern": "4.x",
+                "versionPattern": "^4.0.0",
                 "spaceName": "Default",
                 "projectName": "TAWA",
                 "deployGroup": 2

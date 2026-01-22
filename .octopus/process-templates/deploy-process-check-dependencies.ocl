@@ -118,8 +118,15 @@ parameter "Template.Dependency.Approval" {
             No|No
             EOT
     }
-    help_text = "**Required** - Require approval via a manual intervention if the dependency check fails and you wish to continue or deploy the child dependencies."
-    label = "Require approval to proceed"
+    help_text = <<-EOT
+            **Required** - Request approval via a manual intervention if the dependency check fails and you wish to continue or deploy the child dependencies.  Setting this to Yes DOES NOT guarantee a manual intervention will run.  
+            
+            - If the Dependency Action is set to Stop, it will fail the deployment and not run the manual intervention.
+            - If all the dependencies pass the check, it will continue without running the manual intervention.
+            
+            The log will indicate if an manual intervention was determined to be needed.
+            EOT
+    label = "Approval requested to proceed"
 
     value "Yes" {}
 }
@@ -160,7 +167,15 @@ step "check-dependencies" {
                 $parameterTargetTenantName = $OctopusParameters["Template.Tenant.Name"] # Target Tenant for deployment (when doing multi-tenancy)
                 $parameterSpaceName = $OctopusParameters["Octopus.Space.Name"] # Space name to use for API calls, if not specified will attempt to look up based on space name
                 $stepName = $OctopusParameters["Octopus.Action.StepName"]
-                $parameterApprovalRequested = $OctopusParameters["Template.Dependency.Approval"]
+                $parameterApprovalRequested = $OctopusParameters["Template.Dependency.Approval"] # Indicates if approval was requested
+                
+                Write-Host "Octopus Instance: $parameterOctopusInstance"
+                Write-Host "Dependencies: $parameterDependencies"
+                Write-Host "Dependency Action: $parameterOlderDependencyAction"
+                Write-Host "Approval Requested: $parameterApprovalRequested"
+                Write-Host "Target Environment Name: $parameterTargetEnvironmentName"
+                Write-Host "Target Tenant Name: $parameterTargetTenantName"
+                Write-Host "Target Space Name: $parameterSpaceName"
                 
                 function Get-OctopusUrl
                 {

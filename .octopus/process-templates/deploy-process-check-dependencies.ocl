@@ -771,6 +771,8 @@ step "check-dependencies" {
                         $versionComparison = $false
                     }
                 
+                    Write-Host "Comparing the deployed version $deployedVersion with the latest matching version $sourceVersionToDeploy from earlier environments."
+                
                     if ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $deployedVersion -eq "Stop")
                     {
                         $failDeployment = $true

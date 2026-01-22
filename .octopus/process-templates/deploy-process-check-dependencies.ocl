@@ -819,26 +819,26 @@ step "check-dependencies" {
                     }
                     elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $false)
                     {        
-                        $reason = "✅ $($dependency.ProjectName) has version $($sourceVersionToDeploy) which matches $($dependency.versionPattern) in a previous environment, but it is NOT newer than $($deployedVersion) in $($environment.Name).  No deployment needed for $($dependency.ProjectName)."        
+                        $reason = "✅ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern) and is the latest version.  No deployment needed for $($dependency.ProjectName)."        
                     }
                     elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and ($dependencyAction -eq "Stop" -or $dependencyAction -eq "Continue"))
                     {        
-                        $reason = "✅ $($dependency.ProjectName) has version $($sourceVersionToDeploy) which matches $($dependency.versionPattern) in a previous environment that is newer than $($deployedVersion) in $($environment.Name).  The requirements are met and no deployment was requested, so no deployment will be performed on $($dependency.ProjectName)."        
+                        $reason = "✅ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The requirements are met and no deployment was requested, so no deployment will be performed on $($dependency.ProjectName)."        
                     }    
                     elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction -eq "DeployNoMatchingInTarget")
                     {        
-                        $reason = "✅ $($dependency.ProjectName) has version $($sourceVersionToDeploy) which matches $($dependency.versionPattern) in a previous environment that is newer than $($deployedVersion) in $($environment.Name).  The action is to only deploy when there is nothing matching in $($environment.Name), so no deployment will be performed on any dependencies."        
+                        $reason = "✅ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The action is to only deploy when there is nothing matching in $($environment.Name), so no deployment will be performed on any dependencies."        
                     }
                     elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction -eq "DeployNewerMatching" -and $approvalRequested -eq "Yes")
                     {        
                         $approvalRequired = $true
                         $deploymentIsNeeded = $true
-                        $reason = "⚠️ $($dependency.ProjectName) has version $($sourceVersionToDeploy) which matches $($dependency.versionPattern) in a previous environment that is newer than $($deployedVersion) in $($environment.Name).  The dependency action is set to Deploy Newer Matching, so $($sourceVersionToDeploy) will be deployed, but Approval is required to continue deployment."
+                        $reason = "⚠️ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The dependency action is set to Deploy Newer Matching, so $($sourceVersionToDeploy) will be deployed, but Approval is required to continue deployment."
                     }    
                     elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction -eq "DeployNewerMatching" -and $approvalRequested -eq "No")
                     {                
                         $deploymentIsNeeded = $true
-                        $reason = "⚠️ $($dependency.ProjectName) has version $($sourceVersionToDeploy) which matches $($dependency.versionPattern) in a previous environment that is newer than $($deployedVersion) in $($environment.Name).  The dependency action is set to Deploy Newer Matching and approval is not requested, so $($sourceVersionToDeploy) will be deployed without approval."
+                        $reason = "⚠️ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The dependency action is set to Deploy Newer Matching and approval is not requested, so $($sourceVersionToDeploy) will be deployed without approval."
                     }
                     elseif ($null -ne $deployedVersion -and $null -eq $sourceVersionToDeploy)
                     {

@@ -33,19 +33,19 @@ parameter "Template.Dependency.Projects" {
             [
               {
                 "projectName": "Spear", 
-                "minVersion": "1.0.42", 
+                "versionPattern": ">1.0.42", 
                 "deployGroup": 1,    
                 "spaceName": "Default",
                 "tenantName": null 
               },
               {
-                "minVersion": "^2.4.0",
+                "versionPattern": "^2.4.0",
                 "spaceName": "Default",
                 "projectName": "TAKA",
                 "deployGroup": 1
               },
               {
-                "minVersion": "4.x",
+                "versionPattern": "4.x",
                 "spaceName": "Default",
                 "projectName": "TAWA",
                 "deployGroup": 2
@@ -56,21 +56,18 @@ parameter "Template.Dependency.Projects" {
             The properties to note are:
             
             - projectName - **Required** the name of the project of the dependency.
-            - minVersion - **Required** the minimum version required.  See below for version information.
+            - versionPattern- **Required** the version pattern to match on.  See below for version information.
             - deployGroup - **Optional** indicates which projects can be deployed concurrently vs. which ones that cannot.  If omitted all dependencies are deployed sequentially.
             - spaceName - **Optional** uses the current space if not provided.
             - tenantName - **Optional** the name of the tenant to deploy.  If not specified will use the current tenant being deployed (if doing a tenanted deployment)
             
             The minimum version follows Node's versioning scheme.  But it includes support for four digits (1.2.3.4) as well as three (1.2.3).  Any pre-release tags are removed prior to comparison.
             
-            - Exact version: 1.2.3.4
-            - Caret range: ^1.2.3.4 - Allows minor, patch, and build updates, locking the major version.
+            - Exact version: 1.2.3.4 - only version 1.2.3.4 will be accepted.
+            - Greater than current: >1.2.3.4 - Any version greater than or equal to 1.2.3.4 will be accepted.  
+            - Caret range: ^1.2.3.4 - Allows minor, patch, and build updates, locking the major version.  Similar to 1.x.
             - Tilde range: ~1.2.3.4 - Allows patch and build updates only, locking the major and minor versions.
             - Major wildcard: 2.x - Allows any version or any version within a major range.
-            - Latest: * - Matches on any version, but will make sure the latest version is deployed.
-            
-            **Important** - the template will deploy the _latest_ version found in the source environment that matches the pattern (if it is found).  For example, if test is 2.4.3 and production is 2.4.1 and the pattern is ~2.4.0 then it will ask to deploy 2.4.3 to production.
-            
             EOT
     label = "Project Dependencies"
 }
@@ -79,17 +76,24 @@ parameter "Template.Dependency.Action" {
     display_settings = {
         Octopus.ControlType = "Select"
         Octopus.SelectOptions = <<-EOT
-            Stop|Stop
-            Continue|Continue
-            Deploy|Deploy
+            Stop|Stop Deployment
+            Continue|Continue Deploy
+            DeployNoMatchingInTarget|Deploy only when no matching found
+            DeployNewerMatching|Deploy when newer matching found
             EOT
     }
     help_text = <<-EOT
-            **Required** What the template should do if the dependency check fails.
+            **Required** - Indicates what this template should do when a dependency check fails.
             
             - **Stop:** If one or more of the dependency checks fail it will stop and fail the deployment.
             - **Continue:** Will proceed with the deployment even if the dependency check fails.  Will not attempt to deploy any dependent projects.
-            - **Deploy:** Will trigger the deployments for the latest version that match the minVersion in the dependency to the target environment.  
+            - **Deploy when newer matching found:** Will always deploy the latest matching version from the previous environment.  
+            - **Deploy only when no matching found:** Will trigger a deployment to the target environment only if the target environment doesn't include a matching version.  
+            
+            The deploy options control when a deployment will occur.  For example, your pattern is >4.5.2.  
+            
+            - Test 1 - The latest version in Production is 4.1.2 and in Test it is 4.5.7.  Deploy when newer will deploy 4.5.7.  Deploy when no matching will deploy 4.5.7.
+            - Test 2 - The latest version in Production is 4.5.3 and in test it is 4.5.7.  Deploy when newer will deploy 4.5.7.  Deploy when no matching WILL NOT deploy 4.5.7 because 4.5.3 matches the pattern >4.5.2.
             EOT
     label = "Dependency Action"
 
@@ -156,7 +160,7 @@ step "check-dependencies" {
                 $parameterTargetTenantName = $OctopusParameters["Template.Tenant.Name"] # Target Tenant for deployment (when doing multi-tenancy)
                 $parameterSpaceName = $OctopusParameters["Octopus.Space.Name"] # Space name to use for API calls, if not specified will attempt to look up based on space name
                 $stepName = $OctopusParameters["Octopus.Action.StepName"]
-                $parameterApprovalRequired = $OctopusParameters["Template.Dependency.Approval"]
+                $parameterApprovalRequested = $OctopusParameters["Template.Dependency.Approval"]
                 
                 function Get-OctopusUrl
                 {
@@ -515,9 +519,9 @@ step "check-dependencies" {
                         $deploymentInformation = Invoke-OctopusApi -octopusUrl $parameterOctopusInstance -endPoint "deployments/$($task.Arguments.DeploymentId)" -spaceId $space.Id -apiKey $parameterOctopusAPIKey -method "GET"
                         $releaseInformation = Invoke-OctopusApi -octopusUrl $parameterOctopusInstance -endPoint "releases/$($deploymentInformation.ReleaseId)" -spaceId $space.Id -apiKey $parameterOctopusAPIKey -method "GET"
                 
-                        if (Test-VersionMatchesPattern -versionToCheck $releaseInformation.Version -versionPatternToCheckAgainst $dependency.MinVersion)
+                        if (Test-VersionMatchesPattern -versionToCheck $releaseInformation.Version -versionPatternToCheckAgainst $dependency.versionPattern)
                         {
-                            Write-Host "Found a deployment of $($dependency.ProjectName) with version $($releaseInformation.Version) which satisfies the minimum version requirement of $($dependency.MinVersion)"
+                            Write-Host "Found a deployment of $($dependency.ProjectName) with version $($releaseInformation.Version) which satisfies the minimum version requirement of $($dependency.versionPattern)"
                             return $releaseInformation.Version
                             break
                         }
@@ -533,18 +537,12 @@ step "check-dependencies" {
                         $versionPatternToCheckAgainst
                     )
                 
-                    if ($versionPatternToCheckAgainst -eq "*")
-                    {
-                        Write-Host "The version pattern is *, all versions satisfy this pattern"
-                        return $true
-                    }
-                
                     $localVersionToCheck = Remove-PreReleaseTag -version $versionToCheck    
                     $localVersion = Convert-Version $localVersionToCheck
                 
                     $localPatternToCheckAgainst = Remove-PreReleaseTag -version $versionPatternToCheckAgainst            
                 
-                    # Major wildcard (e.g. 2.x)
+                    # Major wildcard - similar to ^ (e.g. 2.x)
                     if ($localPatternToCheckAgainst -match '^(\d+)\.x$') {        
                         $doesMatch = ($localVersion[0] -eq [int]$matches[1])
                 
@@ -563,7 +561,17 @@ step "check-dependencies" {
                         return $doesMatch                 
                     }
                 
-                    # Caret range (e.g. ^1.2.3 or ^1.2.3.4)
+                    # Greater than any version specified (e.g. >1.2.3 or >1.2.3.4)
+                    if ($localPatternToCheckAgainst -match '>(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$') {
+                        $p = Convert-Version ($localPatternToCheckAgainst.Substring(1))
+                        $doesMatch = ((Compare-Version $localVersion $p) -ge 0)
+                
+                        Write-MatchMessage -doesMatch $doesMatch -version $localVersionToCheck -pattern $versionPatternToCheckAgainst
+                
+                        return $doesMatch                 
+                    }
+                
+                    # Caret range - major version is locked (e.g. ^1.2.3 or ^1.2.3.4)
                     if ($localPatternToCheckAgainst -match '^\^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$') {
                         $p = Convert-Version ($localPatternToCheckAgainst.Substring(1))
                         $doesMatch = ($localVersion[0] -eq $p[0] -and ((Compare-Version $localVersion $p) -ge 0))
@@ -573,7 +581,7 @@ step "check-dependencies" {
                         return $doesMatch
                     }
                 
-                    # Tilde range (e.g. ~1.2.3 or ~1.2.3.4)
+                    # Tilde range - major and minor versions are locked (e.g. ~1.2.3 or ~1.2.3.4)
                     if ($localPatternToCheckAgainst -match '^~(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$') {
                         $p = Convert-Version ($localPatternToCheckAgainst.Substring(1))
                         $doesMatch = ($localVersion[0] -eq $p[0] -and $localVersion[1] -eq $p[1] -and (Compare-Version $localVersion $p) -ge 0)
@@ -669,26 +677,6 @@ step "check-dependencies" {
                     }
                 }
                 
-                function Test-NumberIsGreater
-                {
-                    param(
-                        $versionNumber,
-                        $versionPatternNumber
-                    )
-                
-                    if ($versionPatternNumber -eq "*")
-                    {
-                        return $true
-                    }
-                
-                    if ([int]$versionNumber -gt [int]$versionPatternNumber)
-                    {
-                        return $true
-                    }
-                
-                    return $false
-                }
-                
                 function Remove-PreReleaseTag
                 {
                     param(
@@ -711,6 +699,111 @@ step "check-dependencies" {
                     return $localVersionToCheck
                 }
                 
+                function Get-VersionCompareResult {
+                    param(
+                        $deployedVersion,
+                        $sourceVersionToDeploy,
+                        $dependency,
+                        $environment,
+                        $dependencyAction,
+                        $approvalRequested
+                    )
+                
+                    $deploymentIsNeeded = $false
+                    $failDeployment = $false
+                    $approvalRequired = $false
+                    $reason = $null
+                
+                    if ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy)
+                    {
+                        $versionComparison = Test-VersionIsNewer -targetEnvironmentVersion $deployedVersion -sourceEnvironmentVersion $sourceVersionToDeploy
+                    }
+                    else
+                    {
+                        $versionComparison = $false
+                    }
+                
+                    if ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $deployedVersion -eq "Stop")
+                    {
+                        $failDeployment = $true
+                        $reason = "$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Stop, so failing the deployment."        
+                    }
+                    elseif ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $deployedVersion -like "Deploy*")
+                    {
+                        $failDeployment = $true
+                        $reason = "$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is to deploy a newer version, but there is no version to deploy, so failing the deployment."        
+                    }
+                    elseif ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $deployedVersion -eq "Continue" -and $approvalRequested -eq "Yes")
+                    {
+                        $approvalRequired = $true
+                        $reason = "$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Continue and a Approval is required to continue deployment."
+                    }
+                    elseif ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $deployedVersion -eq "Continue" -and $approvalRequested -eq "No")
+                    {        
+                        $reason = "$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Continue but NO Approval is required to continue deployment."
+                    }
+                    elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $deployedVersion -eq "Stop")
+                    {
+                        $failDeployment = $true
+                        $reason = "$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). It needs to deploy $($sourceVersionToDeploy), but the action is Stop, so failing the deployment."
+                    }
+                    elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $deployedVersion -eq "Continue" -and $approvalRequested -eq "Yes")
+                    {
+                        $approvalRequired = $true
+                        $reason = "$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). It needs to deploy $($sourceVersionToDeploy), but the action is Continue and Approval is required to continue deployment without deploying dependencies."
+                    }
+                    elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $deployedVersion -eq "Continue" -and $approvalRequested -eq "No")
+                    {                
+                        $reason = "$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). It needs to deploy $($sourceVersionToDeploy), but the action is Continue but NO Approval is required to continue deployment without deploying dependencies."
+                    }
+                    elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $deployedVersion -like "Deploy*" -and $approvalRequested -eq "Yes")
+                    {
+                        $approvalRequired = $true
+                        $deploymentIsNeeded = $true
+                        $reason = "$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). We will deploy $($sourceVersionToDeploy), but Approval is required to continue deployment."
+                    }
+                    elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $deployedVersion -like "Deploy*" -and $approvalRequested -eq "No")
+                    {     
+                        $deploymentIsNeeded = $true           
+                        $reason = "$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). We will deploy $($sourceVersionToDeploy), and NO Approval is required to continue deployment."
+                    }
+                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $false)
+                    {        
+                        $reason = "$($dependency.ProjectName) has version $($sourceVersionToDeploy) which matches $($dependency.versionPattern) in a previous environment, but it is NOT newer than $($deployedVersion) in $($environment.Name).  No deployment needed for $($dependency.ProjectName)."        
+                    }
+                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and ($dependencyAction -eq "Stop" -or $dependencyAction -eq "Continue"))
+                    {        
+                        $reason = "$($dependency.ProjectName) has version $($sourceVersionToDeploy) which matches $($dependency.versionPattern) in a previous environment that is newer than $($deployedVersion) in $($environment.Name).  The requirements are met and no deployment was requested, so no deployment will be performed on $($dependency.ProjectName)."        
+                    }    
+                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction -eq "DeployNoMatchingInTarget")
+                    {        
+                        $reason = "$($dependency.ProjectName) has version $($sourceVersionToDeploy) which matches $($dependency.versionPattern) in a previous environment that is newer than $($deployedVersion) in $($environment.Name).  The action is to only deploy when there is nothing matching in $($environment.Name), so no deployment will be performed on any dependencies."        
+                    }
+                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction -eq "DeployNewerMatching" -and $approvalRequested -eq "Yes")
+                    {        
+                        $approvalRequired = $true
+                        $deploymentIsNeeded = $true
+                        $reason = "$($dependency.ProjectName) has version $($sourceVersionToDeploy) which matches $($dependency.versionPattern) in a previous environment that is newer than $($deployedVersion) in $($environment.Name).  The dependency action is set to Deploy Newer Matching, so $($sourceVersionToDeploy) will be deployed, but Approval is required to continue deployment."
+                    }    
+                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction -eq "DeployNewerMatching" -and $approvalRequested -eq "No")
+                    {                
+                        $deploymentIsNeeded = $true
+                        $reason = "$($dependency.ProjectName) has version $($sourceVersionToDeploy) which matches $($dependency.versionPattern) in a previous environment that is newer than $($deployedVersion) in $($environment.Name).  The dependency action is set to Deploy Newer Matching and approval is not requested, so $($sourceVersionToDeploy) will be deployed without approval."
+                    }  
+                    else
+                    {
+                        Write-Error "Unhandled version comparison case for dependency $($dependency.ProjectName).  Exiting with an exit code of 1."
+                        exit 1
+                    }   
+                
+                    return @{
+                        "DeploymentIsNeeded" = $deploymentIsNeeded
+                        "FailDeployment" = $failDeployment
+                        "ApprovalRequired" = $approvalRequired
+                        "Reason" = $reason
+                    }
+                }
+                
                 $dependencyList = ConvertFrom-Json $parameterDependencies
                 
                 $defaultSpace = Get-OctopusItemByName -itemName $spaceName -itemType "Space" -endpoint "spaces" -defaultValue $null -spaceId $null -defaultUrl $defaultUrl -octopusApiKey $octopusApiKey
@@ -719,7 +812,9 @@ step "check-dependencies" {
                 
                 $dependencyResultList = @()
                 $approvalMessageList = @()
-                $allDependenciesSatisfied = $true
+                $requiredDeployment = $false
+                $failEntireDeployment = $false
+                $requireManualIntervention = $false
                 foreach ($dependency in $dependencyList)
                 {
                     $space = Get-OctopusItemByName -itemName $dependency.SpaceName -itemType "Space" -endpoint "spaces" -defaultValue $defaultSpace -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
@@ -735,26 +830,24 @@ step "check-dependencies" {
                     $sourceDeploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 
-                    if ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy)
-                    {
-                        $allDependenciesSatisfied = $false
+                    $dependencyCompareResult = Get-VersionCompareResult -deployedVersion $deployedVersion -sourceVersionToDeploy $sourceVersionToDeploy -dependency $dependency -environment $environment -dependencyAction $parameterOlderDependencyAction -approvalRequested $parameterApprovalRequested
                 
-                        $approvalMessage = "Project $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.MinVersion). It needs to deploy $($sourceVersionToDeploy)."
-                        Write-Highlight $approvalMessage
-                        $approvalMessageList += $approvalMessage
-                        
-                    }
-                    if ($null -ne $sourceVersionToDeploy -and (Test-VersionIsNewer -targetEnvironmentVersion $deployedVersion -sourceEnvironmentVersion $sourceVersionToDeploy))
+                    Write-Highlight "$($dependencyCompareResult.Reason)"
+                    
+                    if ($dependencyCompareResult.DeploymentIsNeeded -eq $true)
                     {
-                        $allDependenciesSatisfied = $false        
+                        $requiredDeployment = $true
+                    }
                 
-                        $approvalMessage = "Project $($dependency.ProjectName) is currently an older version $($deployedVersion) in $($environment.Name) that still matches $($dependency.MinVersion). But $($sourceVersionToDeploy) is newer and matches $($dependency.MinVersion) so it should be deployed."        
-                        Write-Highlight $approvalMessage
-                        $approvalMessageList += $approvalMessage        
-                    }
-                    else
+                    if ($dependencyCompareResult.FailDeployment -eq $true)
                     {
-                        Write-Highlight "Project $($dependency.ProjectName) is currently running $($deployedVersion) which satisfies $($dependency.MinVersion) and is the latest version. No further action needed."
+                        $failEntireDeployment = $true
+                    }
+                
+                    if ($dependencyCompareResult.ApprovalRequired -eq $true)
+                    {
+                        $requireManualIntervention = $true
+                        $approvalMessageList += $dependencyCompareResult.Reason
                     }
                 
                     if ($null -eq $sourceVersionToDeploy)
@@ -767,7 +860,7 @@ step "check-dependencies" {
                         "ProjectId" = $project.Id        
                         "SpaceName" = $space.Name
                         "SpaceId" = $space.Id
-                        "MinVersion" = $dependency.MinVersion
+                        "versionPattern" = $dependency.VersionPattern
                         "DeployedVersion" = $deployedVersion
                         "DeployGroup" = $dependency.DeployGroup                
                         "VersionToDeploy" = $sourceVersionToDeploy
@@ -782,28 +875,23 @@ step "check-dependencies" {
                     $dependencyResultList += $dependencyResult
                 }
                 
-                if ($allDependenciesSatisfied -eq $false -and $parameterOlderDependencyAction -eq "Stop")
+                if ($failEntireDeployment -eq $true)
                 {
-                    Write-Highlight "One or more dependencies do not satisfy the version requirements.  Stopping the deployment as per the parameter configuration."
+                    Write-Highlight "One or more dependencies failed to meet the version requirements and the action is to Stop, failing the deployment."
                     exit 1
                 }
-                
-                $manualInterventionRequired = $false
-                if ($allDependenciesSatisfied -eq $false -and $parameterApprovalRequired -eq "Yes" )
+                elseif ($requiredDeployment -eq $false -and $requireManualIntervention -eq $false)
                 {
-                    Write-Highlight "One or more dependencies do not satisfy the version requirements.  Pausing the deployment for approval."
-                    $manualInterventionRequired = $true      
+                    Write-Highlight "All dependencies satisfy the version requirements and no deployments were requested, you are clear to deploy the main project."
+                    exit 0
                 }
-                
-                $deployOlderVersions = $false
-                if ($allDependenciesSatisfied -eq $false -and $parameterOlderDependencyAction -eq "Deploy" )
-                {    
-                    $deployOlderVersions = $true      
-                }
-                
-                if ($allDependenciesSatisfied -eq $true)
+                elseif ($requiredDeployment -eq $true -and $requireManualIntervention -eq $false)
                 {
-                   Write-Highlight "All dependencies satisfy the version requirements."
+                    Write-Highlight "At least one deployment will be performed to satisfy the dependencies but NO manual intervention is required."
+                }
+                elseif ($requiredDeployment -eq $true -and $requireManualIntervention -eq $true)
+                {
+                    Write-Highlight "At least one deployment will be performed to satisfy the dependencies but will pause for a manual intervention."
                 }
                 
                 $approvalResult = $approvalMessageList -join "`n"
@@ -816,12 +904,12 @@ step "check-dependencies" {
                 Set-OctopusVariable -name "DependencyResult" -value $dependencyResultAsString
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.DependencyResult}"
                 
-                Write-Host "Adding ApprovalRequired with the value $manualInterventionRequired as an output variable"
-                Set-OctopusVariable -name "ApprovalRequired" -value $manualInterventionRequired
+                Write-Host "Adding ApprovalRequired with the value $requireManualIntervention as an output variable"
+                Set-OctopusVariable -name "ApprovalRequired" -value $requireManualIntervention
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.ApprovalRequired}"
                 
-                Write-Host "Adding DeployDependencies with the value $deployOlderVersions as an output variable"
-                Set-OctopusVariable -name "DeployDependencies" -value $deployOlderVersions
+                Write-Host "Adding DeployDependencies with the value $requiredDeployment as an output variable"
+                Set-OctopusVariable -name "DeployDependencies" -value $requiredDeployment
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.DeployDependencies}"
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"

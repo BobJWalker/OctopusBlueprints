@@ -421,7 +421,7 @@ step "check-dependencies" {
                     $orderedTaskList = @($taskList | Sort-Object -Property StartTime -Descending)
                     Write-Verbose "We have $($orderedTaskList.Count) number of tasks to loop through"
                 
-                    return $orderedTaskList
+                    return ,$orderedTaskList
                 }
                 
                 function Get-ProjectChannelsWithDestinationEnvironment
@@ -489,7 +489,7 @@ step "check-dependencies" {
                         exit 1
                     }
                 
-                    return $matchingChannels
+                    return ,$matchingChannels
                 }
                 
                 function Get-SourceEnvironmentsFromPhase

@@ -62,7 +62,7 @@ parameter "Template.Dependency.Projects" {
             
             - projectName - **Required** the name of the project of the dependency.
             - versionPattern- **Required** the version pattern to match on.  See below for version information.
-            - deployGroup - **Optional** indicates which projects can be deployed concurrently vs. which ones that cannot.  If omitted all dependencies are deployed sequentially.
+            - deployGroup - **Optional** Projects in the same deploy group will be deployed concurrently.  Items in different deploy groups will be deployed sequentially.  If omitted all dependencies are deployed sequentially.  
             - spaceName - **Optional** uses the current space if not provided.
             - tenantName - **Optional** the name of the tenant to deploy.  If not specified will use the current tenant being deployed (if doing a tenanted deployment)
             

@@ -572,7 +572,7 @@ step "check-dependencies" {
                         }
                     }
                 
-                    return return @{ 
+                    return @{ 
                         "Version" = $null
                         "Id" = $null
                     }

@@ -860,7 +860,7 @@ step "check-dependencies" {
                 
                 $dependencyList = ConvertFrom-Json $parameterDependencies
                 
-                $defaultSpace = Get-OctopusItemByName -itemName $parameterSpaceName -itemType "Space" -endpoint "spaces" -defaultValue $null -spaceId $null -defaultUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                $defaultSpace = Get-OctopusItemByName -itemName $parameterSpaceName -itemType "Space" -endpoint "spaces" -defaultValue $null -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 $defaultEnvironment = Get-OctopusItemByName -itemName $parameterTargetEnvironmentName -itemType "Environment" -endpoint "environments" -defaultValue $null -spaceId $defaultSpace.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 $defaultTenant = Get-OctopusItemByName -itemName $parameterTenantName -itemType "Tenant" -endpoint "tenants" -defaultValue $null -spaceId $defaultSpace.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 

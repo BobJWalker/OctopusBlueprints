@@ -921,6 +921,8 @@ step "check-dependencies" {
                         "VersionToDeploy" = $sourceVersionToDeploy.Version
                         "ReleaseIdToDeploy" = $sourceVersionToDeploy.Id
                         "DeploymentIsNeeded" = $dependencyCompareResult.DeploymentIsNeeded
+                        "TargetEnvironmentName" = $environment.Name
+                        "TargetEnvironmentId" = $environment.Id
                     }
                 
                     if ($null -ne $tenant)

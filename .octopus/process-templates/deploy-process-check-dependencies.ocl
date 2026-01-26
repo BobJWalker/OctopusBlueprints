@@ -1035,6 +1035,8 @@ step "deploy-dependencies" {
                 $parameterDeploymentTimeoutMinutes = 30 # Timeout for each deployment in minutes
                 $parameterDependencyResults = $OctopusParameters["Octopus.ProcessTemplate.Action[Check Dependencies].Output.DependencyResult"]
                 
+                Write-Host "The dependency results to deploy are $parameterDependencyResults"
+                
                 function Get-OctopusUrl
                 {
                     param (
@@ -1306,6 +1308,8 @@ step "deploy-dependencies" {
                             $nullDeployGroupOrder += 1
                         }
                 
+                        Write-Host "The current deploy group being checked is $deployGroup"
+                
                         if ($deployGroupOrdered -notcontains $deployGroup)
                         {
                             Write-Host "Found new deploy group for the ordered list: $deployGroup"
@@ -1365,7 +1369,7 @@ step "deploy-dependencies" {
                 
                 foreach ($deployGroup in $deployGroupInfo.DeployGroupOrdered)
                 {
-                    Write-Host "Checking all the dependencies $deployGroup have been deployed.  Any dependencies that haven't been deployed will be started.."    
+                    Write-Host "Checking all the dependencies in deploy group $deployGroup have been deployed.  Any dependencies that haven't been deployed will be started.."    
                 
                     $dependenciesInGroup = $deployGroupInfo.DeployGroupDependencyList[$deployGroup].DependencyList
                     $deploymentCounter = 0

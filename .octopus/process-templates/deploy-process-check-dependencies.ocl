@@ -1371,12 +1371,12 @@ step "deploy-dependencies" {
                 {
                     Write-Host "Checking all the dependencies in deploy group $deployGroup have been deployed.  Any dependencies that haven't been deployed will be started.."    
                 
-                    $dependenciesInGroup = $deployGroupInfo.DeployGroupDependencyList[$deployGroup].DependencyList
-                    $deploymentCounter = 0
+                    $dependenciesInGroup = $deployGroupInfo.DeployGroupDependencyList[$deployGroup].DependencyList    
                     $allDeploymentsCompleted = $false
                 
                     do 
                     {
+                        $deploymentCounter = 0
                         Write-Host "Looping through dependencies in deploy group $deployGroup to start and check deployment status"
                         foreach ($dependency in $dependenciesInGroup)
                         {
@@ -1404,11 +1404,6 @@ step "deploy-dependencies" {
                 
                             if ($dependency.DeploymentIsNeeded -eq $false)
                             {   
-                                if ($null -eq $dependency.DeploymentTaskId)
-                                {
-                                    Write-Highlight "✅ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) is not needed, skipping deployment."
-                                }
-                
                                 $deploymentCounter += 1
                                 continue
                             }
@@ -1423,6 +1418,15 @@ step "deploy-dependencies" {
                         if ($deploymentCounter -eq $dependenciesInGroup.Count)
                         {
                             $allDeploymentsCompleted = $true
+                
+                            foreach ($dependency in $dependenciesInGroup)
+                            {
+                                if ($dependency.DeploymentIsNeeded -eq $false -and $null -eq $dependency.DeploymentTaskId)
+                                {         
+                                    Write-Highlight "✅ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) is not needed."                       
+                                }            
+                            }
+                            
                             Write-Highlight "✅ All deployments for deploy group $deployGroup have been completed."
                         }
                         else 

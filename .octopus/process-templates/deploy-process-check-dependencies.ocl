@@ -939,12 +939,12 @@ step "check-dependencies" {
                     $dependencyResultList += $dependencyResult
                 }
                 
-                $approvalResult = $approvalMessageList -join "`n"
+                $approvalResult = $approvalMessageList -join "`r`n"
                 Write-Host "Adding ApprovalMessages as an output variable with the value $approvalResult"
                 Set-OctopusVariable -name "ApprovalMessages" -value $approvalResult
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.ApprovalMessages}"
                 
-                $dependencyResultAsString = ConvertTo-Json $dependencyResult
+                $dependencyResultAsString = ConvertTo-Json $dependencyResultList
                 Write-Host "Adding DependencyResult as an output variable with the value $dependencyResultAsString"
                 Set-OctopusVariable -name "DependencyResult" -value $dependencyResultAsString
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.DependencyResult}"

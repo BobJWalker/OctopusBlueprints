@@ -160,6 +160,11 @@ step "check-dependencies" {
 
     action {
         action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Checks the JSON provided to see if all the necessary projects that this project depends on has been deployed.
+                EOT
         properties = {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
@@ -987,6 +992,11 @@ step "approve-dependency-result" {
 
     action {
         action_type = "Octopus.Manual"
+        notes = <<-EOT
+                **Conditionally Runs**
+                
+                Only runs when the `Check Dependencies` step determines that approval is needed to proceed with this deployment.  Possible reasons this step will run include a dependency hasn't been deployed but `Continue` is the selected option with approval requests, or a dependency needs to be deployed but it requires approval.
+                EOT
         properties = {
             Octopus.Action.Manual.BlockConcurrentDeployments = "True"
             Octopus.Action.Manual.Instructions = <<-EOT
@@ -999,5 +1009,434 @@ step "approve-dependency-result" {
                 EOT
             Octopus.Action.Manual.ResponsibleTeamIds = "#{Template.Approval.Teams}"
         }
+    }
+}
+
+step "deploy-dependencies" {
+    condition = "Variable"
+    name = "Deploy Dependencies"
+    properties = {
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Octopus.ProcessTemplate.Action[Check Dependencies].Output.DeployDependencies}#{/unless}"
+    }
+
+    action {
+        action_type = "Octopus.Script"
+        notes = <<-EOT
+                **Conditionally Runs**
+                
+                Only runs when a dependency needs to be deployed and the `Dependency Action` parameter is set to one of the deploy options.
+                EOT
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $parameterOctopusAPIKey = $OctopusParameters["Template.Octopus.Api.Key"]    # Octopus Deploy API key
+                $parameterOctopusInstance = $OctopusParameters["Octopus.Web.ServerUri"] # Octopus Deploy instance URL
+                $parameterMinAvailableTaskCapacity = 3 # Minimum available task capacity required before starting a new deployment
+                $parameterDeploymentTimeoutMinutes = 30 # Timeout for each deployment in minutes
+                $parameterDependencyResults = $OctopusParameters["Octopus.ProcessTemplate.Action[Check Dependencies].Output.DependencyResult"]
+                
+                function Get-OctopusUrl
+                {
+                    param (
+                        $EndPoint,
+                        $SpaceId,
+                        $OctopusUrl
+                    )
+                
+                    $octopusUrlToUse = $OctopusUrl
+                    if ($OctopusUrl.EndsWith("/"))
+                    {
+                        $octopusUrlToUse = $OctopusUrl.Substring(0, $OctopusUrl.Length - 1)
+                    }
+                
+                    if ($EndPoint -match "/api")
+                    {
+                        if (!$EndPoint.StartsWith("/api"))
+                        {
+                            $EndPoint = $EndPoint.Substring($EndPoint.IndexOf("/api"))
+                        }
+                
+                        return "$octopusUrlToUse$EndPoint"
+                    }
+                
+                    if ([string]::IsNullOrWhiteSpace($SpaceId))
+                    {
+                        return "$octopusUrlToUse/api/$EndPoint"
+                    }
+                
+                    return "$octopusUrlToUse/api/$spaceId/$EndPoint"
+                }
+                
+                function Invoke-OctopusApi
+                {
+                    param
+                    (
+                        $octopusUrl,
+                        $spaceId,
+                        $endPoint,
+                        $apiKey,
+                        $method,
+                        $item,        
+                        $retryCount
+                    )
+                
+                    try
+                    {        
+                        $url = Get-OctopusUrl -EndPoint $endPoint -SpaceId $spaceId -OctopusUrl $octopusUrl
+                
+                        if ($null -eq $item)
+                        {            
+                            Write-Verbose "No data to post or put, calling bog standard invoke-restmethod for $url"
+                            return Invoke-RestMethod -Method $method -Uri $url -Headers @{"X-Octopus-ApiKey" = "$ApiKey" } -ContentType 'application/json; charset=utf-8' -TimeoutSec 60
+                        }
+                
+                        $body = $item | ConvertTo-Json -Depth 10
+                        Write-Verbose $body
+                
+                        Write-Verbose "Invoking $method $url"
+                        return Invoke-RestMethod -Method $method -Uri $url -Headers @{"X-Octopus-ApiKey" = "$ApiKey" } -Body $body -ContentType 'application/json; charset=utf-8' -TimeoutSec 60
+                    }
+                    catch [System.TimeoutException]
+                    {        
+                        $newRetryCount = 1
+                        if ($null -ne $retryCount)
+                        {
+                            $newRetryCount = $retryCount + 1
+                        }
+                
+                        if ($newRetryCount -gt 4)
+                        {
+                            Throw "Timeout detected, max retries has been exceeded for this call.  Exiting."
+                        }
+                        else 
+                        {
+                            Write-Host "Timeout detected, going to retry this call for the $newRetryCount time."
+                            Invoke-OctopusApi -url $url -apiKey $apiKey -method $method -item $item -filePath $filePath -retryCount $retryCount        
+                        }
+                    }
+                    catch
+                    {
+                        Write-Error "There was an error making a $method call to $url.  All request information (JSON body specifically) is stored in the log.  Please check that for more information."
+                
+                        if ($null -ne $_.Exception.Response)
+                        {
+                            if ($_.Exception.Response.StatusCode -eq 401)
+                            {
+                                Write-Error "Unauthorized error returned from $url, please verify API key and try again"
+                            }
+                            elseif ($_.ErrorDetails.Message)
+                            {                
+                                Write-Error -Message "Error calling $url StatusCode: $($_.Exception.Response) $($_.ErrorDetails.Message)"
+                                Write-Error $_.Exception
+                            }            
+                            else 
+                            {
+                                Write-Error $_.Exception
+                            }
+                        }
+                        else
+                        {
+                            Write-Error $_.Exception
+                        }
+                
+                        Write-Error "Stopping the deployment."
+                        Exit 1
+                    }    
+                }
+                
+                function Get-ListFromOctopusApi
+                {
+                    param (
+                        $octopusUrl,
+                        $endPoint,
+                        $spaceId,
+                        $apiKey,
+                        $propertyName
+                    )
+                
+                    $rawItemList = Invoke-OctopusApi -octopusUrl $octopusUrl -endPoint $endPoint -spaceId $spaceId -apiKey $octopusApiKey -method "GET"
+                
+                    $returnList = @($rawItemList.$propertyName)
+                
+                    Write-Verbose "The endpoint $endPoint returned a list with $($returnList.Count) items"
+                
+                    return ,$returnList
+                }
+                
+                function Get-TaskCapLimitFromApi
+                {
+                    param(
+                        $octopusUrl,
+                        $octopusApiKey
+                    )
+                
+                    $licenseUsage = Invoke-OctopusApi -octopusUrl $octopusUrl -endPoint "licenses/licenses-current-usage" -spaceId $null -apiKey $octopusApiKey -method "GET"
+                    
+                    $taskCapLimit = 0 
+                    $licenseLimitOnTaskCap = $false   
+                
+                    foreach ($limit in $licenseUsage.Limits)
+                    {
+                        if ($limit.Name -eq "Task Cap")
+                        {
+                            $taskCapLimit = $limit.LicensedLimit            
+                            $licenseLimitOnTaskCap = $true
+                            break
+                        }
+                    }
+                
+                    if ($taskCapLimit -eq 0 -or $taskCapLimit -eq 2147483647)
+                    {
+                        $taskCapLimit = 0
+                        Write-Host "The task cap license limit is unlimited, we need to check the nodes to determine the task cap"                
+                        $nodeList = Get-ListFromOctopusApi -octopusUrl $octopusUrl -endPoint "octopusservernodes" -spaceId $null -apiKey $octopusApiKey -property "Items"
+                
+                        foreach ($node in $nodeList)
+                        {
+                            $taskCapLimit += $node.MaxConcurrentTasks
+                        }
+                    }
+                
+                    Write-Host "The task cap for $octopusUrl is $taskCapLimit"
+                
+                    return @{
+                        "Limit" = $taskCapLimit
+                        "LicenseLimitOnTaskCap" = $licenseLimitOnTaskCap
+                    }
+                }
+                
+                function Get-AvailableTaskCapacity
+                {
+                    param(
+                        $octopusUrl,
+                        $octopusApiKey,
+                        $taskCapLimit,
+                        $minAvailableTaskCapacity
+                    )
+                
+                    $currentRunningTaskList = Invoke-OctopusApi -octopusUrl $octopusUrl -endPoint "tasks?skip=0&take=1" -spaceId $null -apiKey $octopusApiKey -method "GET"
+                    $currentRunningTaskCount = $currentRunningTaskList.TotalCounts.Executing
+                
+                    Write-Host "There are currently $currentRunningTaskCount running tasks on $octopusUrl"
+                
+                    $estimatedTaskCapWithNewDeployment = $currentRunningTaskCount + 1
+                    $maxRunningTasksAllowed = $taskCapLimit.Limit - $minAvailableTaskCapacity
+                
+                    if ($estimatedTaskCapWithNewDeployment -gt $maxRunningTasksAllowed)
+                    {
+                        Write-Host "A new deployment would exceed the task cap limit of $($taskCapLimit.TaskCapLimit) and capacity of $minAvailableTaskCapacity required.  Current running tasks: $currentRunningTaskCount, max tasks allowed: $maxRunningTasksAllowed.  Waiting for an available deployment slot..."
+                        return $false
+                    }
+                
+                    Write-Host "A new deployment will set the current running tasks to $estimatedTaskCapWithNewDeployment which is at or below $maxRunningTasksAllowed.  Current running tasks: $currentRunningTaskCount, max tasks allowed: $maxRunningTasksAllowed.  Proceeding with deployment..."
+                    Return $true    
+                }
+                
+                function Wait-ForAvailableCapacity
+                {
+                    param(
+                        $octopusUrl,
+                        $octopusApiKey,
+                        $taskCapLimit,
+                        $minAvailableTaskCapacity
+                    )
+                
+                    $currentCapacityAvailable = $false
+                    do 
+                    {
+                        $currentCapacityAvailable = Get-AvailableTaskCapacity -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -taskCapLimit $taskCapLimit -minAvailableTaskCapacity $parameterMinAvailableTaskCapacity
+                
+                        if ($currentCapacityAvailable -eq $false)
+                        {
+                            Write-Host "Insufficient task capacity to start deployment for project $($dependency.ProjectName) to environment $($dependency.TargetEnvironmentName), will sleep for 10 seconds and check again..."
+                            Start-Sleep -Seconds 10
+                        }
+                        else 
+                        {
+                            Write-Host "Sufficient task capacity is available to start deployment for project $($dependency.ProjectName) to environment $($dependency.TargetEnvironmentName)."
+                        }
+                    }
+                    while ($currentCapacityAvailable -eq $false)
+                }
+                
+                function Invoke-DependencyDeployment
+                {
+                    param(
+                        $octopusUrl,
+                        $octopusApiKey,
+                        $dependency
+                    )
+                
+                    Write-Host "Starting deployment for project $($dependency.ProjectName) to environment $($dependency.TargetEnvironmentName)..."
+                
+                    # Simulate deployment task ID
+                    return "DeploymentTask-12345"
+                }
+                
+                function Get-DeploymentStatus
+                {
+                    param(
+                        $octopusUrl,
+                        $octopusApiKey,
+                        $deploymentTaskId
+                    )
+                
+                    # Simulate checking deployment status
+                    return "Success"
+                }
+                
+                function Get-DeployGroupInfo
+                {
+                    param(
+                        $dependencyResultList
+                    )
+                    
+                    $deployGroupDependencyList = @{}
+                    $deployGroupOrdered = @()
+                    $nullDeployGroupOrder = 2147400000
+                    
+                    foreach ($dependency in $dependencyResultList)
+                    {           
+                        $deployGroup = $dependency.DeployGroup
+                
+                        if ($null -eq $dependency.DeployGroup)
+                        {
+                            Write-Host "The deploy group is empty or null, setting the deploy group to $nullDeployGroupOrder to ensure they are always processed last.  Future log messages will refer to this as deploy group $nullDeployGroupOrder for $($dependency.ProjectName)."
+                            $deployGroup = $nullDeployGroupOrder
+                            $nullDeployGroupOrder += 1
+                        }
+                
+                        if ($deployGroupOrdered -notcontains $deployGroup)
+                        {
+                            Write-Host "Found new deploy group for the ordered list: $deployGroup"
+                            $deployGroupOrdered += $deployGroup            
+                        }
+                
+                        if (($deployGroupDependencyList.ContainsKey($deployGroup)) -eq $false)
+                        {        
+                            $deployGroupDependency = @{
+                                "DependencyList" = @()                
+                            }            
+                
+                            Write-Host "Adding new deploy group dependency entry for deploy group: $deployGroup"
+                            $deployGroupDependencyList.Add($deployGroup, $deployGroupDependency)
+                        }
+                
+                        Write-Host "Adding dependency for project $($dependency.ProjectName) to deploy group $deployGroup"
+                        $deployGroupDependencyList[$deployGroup].DependencyList += ConvertFrom-Dependency -dependency $dependency
+                    }     
+                
+                    $deployGroupOrdered = $deployGroupOrdered | Sort-Object    
+                    
+                    return @{
+                        "DeployGroupDependencyList" = $deployGroupDependencyList
+                        "DeployGroupOrdered" = $deployGroupOrdered
+                    }
+                }
+                
+                function ConvertFrom-Dependency{
+                    param(
+                        $dependency
+                    )
+                
+                    return @{
+                        "ProjectName" = $dependency.ProjectName
+                        "ProjectId" = $dependency.ProjectId
+                        "TargetEnvironmentName" = $dependency.TargetEnvironmentName
+                        "TargetEnvironmentId" = $dependency.TargetEnvironmentId
+                        "DeployGroup" = $dependency.DeployGroup
+                        "SpaceId" = $dependency.SpaceId
+                        "SpaceName" = $dependency.SpaceName
+                        "DeploymentIsNeeded" = $dependency.DeploymentIsNeeded        
+                        "ReleaseIdToDeploy" = $dependency.ReleaseIdToDeploy
+                        "DeployedReleaseId" = $dependency.DeployedReleaseId
+                        "DeployedVersion" = $dependency.DeployedVersion                
+                        "VersionToDeploy" = $dependency.VersionToDeploy
+                        "VersionPattern" = $dependency.VersionPattern
+                
+                        "DeploymentTaskId" = $null        
+                    }
+                }            
+                    
+                
+                $dependencyResultList = $parameterDependencyResults | ConvertFrom-Json
+                $taskCapLimit = Get-TaskCapLimitFromApi -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                $deployGroupInfo = Get-DeployGroupInfo -dependencyResultList $dependencyResultList
+                
+                foreach ($deployGroup in $deployGroupInfo.DeployGroupOrdered)
+                {
+                    Write-Host "Checking all the dependencies $deployGroup have been deployed.  Any dependencies that haven't been deployed will be started.."    
+                
+                    $dependenciesInGroup = $deployGroupInfo.DeployGroupDependencyList[$deployGroup].DependencyList
+                    $deploymentCounter = 0
+                    $allDeploymentsCompleted = $false
+                
+                    do 
+                    {
+                        Write-Host "Looping through dependencies in deploy group $deployGroup to start and check deployment status"
+                        foreach ($dependency in $dependenciesInGroup)
+                        {
+                            if ($null -ne $dependency.DeploymentTaskId)
+                            {
+                                Write-Host "Checking on the status of deployment $($dependency.DeploymentTaskId) for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName)..."
+                
+                                $deploymentStatus = Get-DeploymentStatus -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -deploymentTaskId $dependency.DeploymentTaskId
+                                if ($deploymentStatus -eq "Running" -or $deploymentStatus -eq "Queued")
+                                {
+                                    Write-Host "⏳ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) is still in progress with status $deploymentStatus.  Will check again later..."
+                                    continue
+                                }
+                
+                                $dependency.DeploymentIsNeeded = $false                
+                
+                                if ($deploymentStatus -ne "Success")
+                                {
+                                    Write-Error "❌ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) failed with status $deploymentStatus.  Stopping further deployments."
+                                    Exit 1
+                                }
+                
+                                Write-Host "✅ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) was successfully deployed."
+                            }
+                
+                            if ($dependency.DeploymentIsNeeded -eq $false)
+                            {   
+                                if ($null -eq $dependency.DeploymentTaskId)
+                                {
+                                    Write-Host "✅ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) is not needed, skipping deployment."
+                                }
+                
+                                $deploymentCounter += 1
+                                continue
+                            }
+                
+                            Write-Host "Checking to see if there available capacity to deploy $($dependency.ProjectName) to environment $($dependency.TargetEnvironmentName)..."
+                            Wait-ForAvailableCapacity -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -taskCapLimit $taskCapLimit -minAvailableTaskCapacity $parameterMinAvailableTaskCapacity        
+                
+                            Write-Host "There is sufficient capacity to deploy $($dependency.ProjectName) to $($dependency.TargetEnvironmentName).  Starting deployment now..."
+                            $dependency.DeploymentTaskId = Invoke-DependencyDeployment -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -dependency $dependency            
+                        }
+                
+                        if ($deploymentCounter -eq $dependenciesInGroup.Count)
+                        {
+                            $allDeploymentsCompleted = $true
+                            Write-Host "✅ All deployments for deploy group $deployGroup have been completed."
+                        }
+                        else 
+                        {
+                            Write-Host "⏳ Not all deployments for deploy group $deployGroup have been completed. Sleeping for 10 seconds before re-evaluating..."
+                            Start-Sleep -Seconds 10
+                        }
+                    } while ($allDeploymentsCompleted -eq $false)    
+                }
+                
+                Write-Host "✅ All dependency deployments have been successfully verified."
+                
+                
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{Template.Worker.Pool}"
     }
 }

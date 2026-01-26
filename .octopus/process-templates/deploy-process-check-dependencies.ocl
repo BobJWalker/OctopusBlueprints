@@ -791,11 +791,11 @@ step "check-dependencies" {
                     elseif ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $deployedVersion -eq "Continue" -and $approvalRequested -eq "Yes")
                     {
                         $approvalRequired = $true
-                        $reason = "⚠️ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Continue and a Approval is required to continue deployment."
+                        $reason = "⚠️ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Continue and a Approval is required to continue."
                     }
                     elseif ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $deployedVersion -eq "Continue" -and $approvalRequested -eq "No")
                     {        
-                        $reason = "✅ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Continue but NO Approval is required to continue deployment."
+                        $reason = "✅ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Continue but NO Approval is required to continue."
                     }
                     elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $deployedVersion -eq "Stop")
                     {
@@ -805,7 +805,7 @@ step "check-dependencies" {
                     elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $deployedVersion -eq "Continue" -and $approvalRequested -eq "Yes")
                     {
                         $approvalRequired = $true
-                        $reason = "✅ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). It needs to deploy $($sourceVersionToDeploy), but the action is Continue and Approval is required to continue deployment without deploying dependencies."
+                        $reason = "✅ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). It needs to deploy $($sourceVersionToDeploy).  The action is Continue and Approval is required to continue."
                     }
                     elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $deployedVersion -eq "Continue" -and $approvalRequested -eq "No")
                     {                
@@ -815,7 +815,7 @@ step "check-dependencies" {
                     {
                         $approvalRequired = $true
                         $deploymentIsNeeded = $true
-                        $reason = "⚠️ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). We will deploy $($sourceVersionToDeploy), but Approval is required to continue deployment."
+                        $reason = "⚠️ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). We will deploy $($sourceVersionToDeploy).  Approval is required to continue."
                     }
                     elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $deployedVersion -like "Deploy*" -and $approvalRequested -eq "No")
                     {     
@@ -838,7 +838,7 @@ step "check-dependencies" {
                     {        
                         $approvalRequired = $true
                         $deploymentIsNeeded = $true
-                        $reason = "⚠️ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The dependency action is set to Deploy Newer Matching, so $($sourceVersionToDeploy) will be deployed, but Approval is required to continue deployment."
+                        $reason = "⚠️ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The dependency action is set to Deploy Newer Matching, so $($sourceVersionToDeploy) will be deployed.  Approval is required to continue."
                     }    
                     elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction -eq "DeployNewerMatching" -and $approvalRequested -eq "No")
                     {                
@@ -907,6 +907,7 @@ step "check-dependencies" {
                     {
                         $requireManualIntervention = $true
                         $approvalMessageList += $dependencyCompareResult.Reason
+                        $approvalMessageList += ""
                     }
                 
                     if ($null -eq $sourceVersionToDeploy.Version)
@@ -939,7 +940,7 @@ step "check-dependencies" {
                     $dependencyResultList += $dependencyResult
                 }
                 
-                $approvalResult = $approvalMessageList -join "\n"
+                $approvalResult = $approvalMessageList -join "`n"
                 Write-Host "Adding ApprovalMessages as an output variable with the value $approvalResult"
                 Set-OctopusVariable -name "ApprovalMessages" -value $approvalResult
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.ApprovalMessages}"

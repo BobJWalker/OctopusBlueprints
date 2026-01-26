@@ -1395,14 +1395,14 @@ step "deploy-dependencies" {
                                     Exit 1
                                 }
                 
-                                Write-Host "✅ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) was successfully deployed."
+                                Write-Highlight "✅ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) was successfully deployed."
                             }
                 
                             if ($dependency.DeploymentIsNeeded -eq $false)
                             {   
                                 if ($null -eq $dependency.DeploymentTaskId)
                                 {
-                                    Write-Host "✅ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) is not needed, skipping deployment."
+                                    Write-Highlight "✅ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) is not needed, skipping deployment."
                                 }
                 
                                 $deploymentCounter += 1
@@ -1419,7 +1419,7 @@ step "deploy-dependencies" {
                         if ($deploymentCounter -eq $dependenciesInGroup.Count)
                         {
                             $allDeploymentsCompleted = $true
-                            Write-Host "✅ All deployments for deploy group $deployGroup have been completed."
+                            Write-Highlight "✅ All deployments for deploy group $deployGroup have been completed."
                         }
                         else 
                         {
@@ -1429,7 +1429,7 @@ step "deploy-dependencies" {
                     } while ($allDeploymentsCompleted -eq $false)    
                 }
                 
-                Write-Host "✅ All dependency deployments have been successfully verified."
+                Write-Highlight "✅ All dependency deployments have been successfully verified."
                 
                 
                 EOT

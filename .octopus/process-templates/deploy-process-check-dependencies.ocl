@@ -1416,7 +1416,7 @@ step "deploy-dependencies" {
                                 Write-Host "Checking on the status of deployment $($dependency.DeploymentTaskId) for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName)..."
                 
                                 $deploymentStatus = Get-DeploymentStatus -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -deploymentTaskId $dependency.DeploymentTaskId
-                                if ($deploymentStatus -eq "Running" -or $deploymentStatus -eq "Queued")
+                                if ($deploymentStatus -eq "Running" -or $deploymentStatus -eq "Queued" -or $deploymentStatus -eq "Executing" -or $deploymentStatus -eq "Interrupted")
                                 {
                                     Write-Host "⏳ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) is still in progress with status $deploymentStatus.  Will check again later..."
                                     continue

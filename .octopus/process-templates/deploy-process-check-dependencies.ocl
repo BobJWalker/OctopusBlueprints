@@ -1272,8 +1272,13 @@ step "deploy-dependencies" {
                 
                     Write-Host "Starting deployment for project $($dependency.ProjectName) to environment $($dependency.TargetEnvironmentName)..."
                 
-                    # Simulate deployment task ID
-                    return "DeploymentTask-12345"
+                    $deploymentRequest = New-OctopusDeploymentRequest -dependency $dependency
+                
+                    Write-Host "Deploying $($dependency.VersionToDeploy) for $($dependency.ProjectName) to $($dependency.TargetEnvironmentName)"
+                    $createdDeploymentResponse = Invoke-OctopusApi -method "POST" -endPoint "deployments" -octopusUrl $octopusUrl -apiKey $octopusApiKey -spaceId $dependency.SpaceId -item $deploymentRequest
+                    Write-Host "The task id for the new deployment is $($createdDeploymentResponse.TaskId)"    
+                    
+                    return $createdDeploymentResponse.TaskId
                 }
                 
                 function Get-DeploymentStatus
@@ -1284,8 +1289,11 @@ step "deploy-dependencies" {
                         $deploymentTaskId
                     )
                 
-                    # Simulate checking deployment status
-                    return "Success"
+                    $taskStatusResponse = Invoke-OctopusApi -octopusUrl $octopusUrl -spaceId $spaceId -apiKey $octopusApiKey -endPoint "tasks/$($deploymentTaskId)" -method "GET"   
+                
+                    $taskStatusResponseState = $taskStatusResponse.State
+                    
+                    return $taskStatusResponseState
                 }
                 
                 function Get-DeployGroupInfo
@@ -1361,7 +1369,29 @@ step "deploy-dependencies" {
                 
                         "DeploymentTaskId" = $null        
                     }
-                }            
+                } 
+                
+                function New-OctopusDeploymentRequest {
+                    param(
+                        $dependency
+                    )
+                    
+                    return @{
+                        EnvironmentId = $dependency.TargetEnvironmentId;
+                        ExcludeMachineIds = @();
+                        ForcePackageDownload = $false;
+                        ForcePackageRedeployment = $false;
+                        FormValues = @{};
+                        QueueTime = $null;
+                        QueueTimeExpiry = $null;
+                        ReleaseId = $dependency.ReleaseIdToDeploy;
+                        SkipActions = @();
+                        SpecificMachineIds = @();
+                        TenantId = $null;
+                        UseGuidedFailure = $false
+                    }
+                
+                }
                     
                 
                 $dependencyResultList = $parameterDependencyResults | ConvertFrom-Json
@@ -1414,6 +1444,8 @@ step "deploy-dependencies" {
                 
                             Write-Host "There is sufficient capacity to deploy $($dependency.ProjectName) to $($dependency.TargetEnvironmentName).  Starting deployment now..."
                             $dependency.DeploymentTaskId = Invoke-DependencyDeployment -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -dependency $dependency            
+                
+                            Write-Host "✅ $($dependency.ProjectName) $($dependency.VersionToDeploy) was successfully invoked, you can access the deployment [here]($octopusUrl/app#/$($dependency.SpaceId)/tasks/$($dependency.DeploymentTaskId))"
                         }
                 
                         if ($deploymentCounter -eq $dependenciesInGroup.Count)

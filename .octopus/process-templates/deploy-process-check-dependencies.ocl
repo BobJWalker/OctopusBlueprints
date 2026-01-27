@@ -293,7 +293,7 @@ step "check-dependencies" {
                     }
                     catch
                     {
-                        Write-Error "There was an error making a $method call to $url.  All request information (JSON body specifically) is stored in the log.  Please check that for more information."
+                        Write-Highlight "There was an error making a $method call to $url.  All request information (JSON body specifically) is stored in the log.  Please check that for more information."
                 
                         if ($null -ne $_.Exception.Response)
                         {
@@ -490,7 +490,8 @@ step "check-dependencies" {
                 
                     if ($matchingChannels.Count -eq 0)
                     {
-                        Write-Error "Unable to find any channels for project $($dependency.ProjectName) that can deploy to environment $($environment.Name).  Exiting with an exit code of 1."
+                        Write-Highlight "❌ Unable to find any channels for project $($dependency.ProjectName) that can deploy to environment $($environment.Name).  Stopping deployments."
+                        Write-Error "Stopping deployment because no matching lifecycles for the desired environment name can be found."
                         exit 1
                     }
                 
@@ -851,7 +852,8 @@ step "check-dependencies" {
                     }
                     else
                     {
-                        Write-Error "❌ Unhandled version comparison case for dependency $($dependency.ProjectName).  Exiting with an exit code of 1."
+                        Write-Highlight "❌ Unhandled version comparison case for dependency $($dependency.ProjectName).  Stopping deployment."
+                        Write-Error "Encountered an edge case when comparing versions, exiting with an exit code of 1 to prevent problems."
                         exit 1
                     }   
                 
@@ -1119,7 +1121,7 @@ step "deploy-dependencies" {
                     }
                     catch
                     {
-                        Write-Error "There was an error making a $method call to $url.  All request information (JSON body specifically) is stored in the log.  Please check that for more information."
+                        Write-Highlight "There was an error making a $method call to $url.  All request information (JSON body specifically) is stored in the log.  Please check that for more information."
                 
                         if ($null -ne $_.Exception.Response)
                         {
@@ -1426,7 +1428,8 @@ step "deploy-dependencies" {
                 
                                 if ($deploymentStatus -ne "Success")
                                 {
-                                    Write-Error "❌ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) failed with status $deploymentStatus.  Stopping further deployments."
+                                    Write-Highlight "❌ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) failed with status $deploymentStatus.  Stopping further deployments."
+                                    Write-Error "Stopping the deployment because the dependency deployment failed."
                                     Exit 1
                                 }
                 

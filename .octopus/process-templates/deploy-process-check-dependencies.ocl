@@ -1288,12 +1288,28 @@ step "deploy-dependencies" {
                     param(
                         $octopusUrl,
                         $octopusApiKey,
-                        $deploymentTaskId
+                        $deploymentTaskId,
+                        $timeoutInMinutes
                     )
                 
                     $taskStatusResponse = Invoke-OctopusApi -octopusUrl $octopusUrl -spaceId $spaceId -apiKey $octopusApiKey -endPoint "tasks/$($deploymentTaskId)" -method "GET"   
                 
                     $taskStatusResponseState = $taskStatusResponse.State
+                
+                    if ($null -ne $taskStatusResponse.StartTime)
+                    {
+                        $deploymentStartTime = [DateTime]::Parse($taskStatusResponse.StartTime)
+                        $currentTime = Get-UtcDate
+                        $timeDifference = $currentTime - $deploymentStartTime
+                        $timeDifferenceInMinutes = $timeDifference.TotalMinutes
+                
+                        if ($timeDifferenceInMinutes -gt $timeoutInMinutes)
+                        {
+                            Write-Highlight "❌ Deployment task $deploymentTaskId has exceeded the timeout of $timeoutInMinutes minutes.  Stopping further deployments."
+                            Write-Error "Stopping deployment because it exceeded the timeout allowed."
+                            Exit 1
+                        }
+                    }
                     
                     return $taskStatusResponseState
                 }
@@ -1417,7 +1433,7 @@ step "deploy-dependencies" {
                             {
                                 Write-Host "Checking on the status of deployment $($dependency.DeploymentTaskId) for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName)..."
                 
-                                $deploymentStatus = Get-DeploymentStatus -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -deploymentTaskId $dependency.DeploymentTaskId
+                                $deploymentStatus = Get-DeploymentStatus -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -deploymentTaskId $dependency.DeploymentTaskId -timeoutInMinutes $parameterDeploymentTimeoutMinutes
                                 if ($deploymentStatus -eq "Running" -or $deploymentStatus -eq "Queued" -or $deploymentStatus -eq "Executing" -or $deploymentStatus -eq "Interrupted")
                                 {
                                     Write-Host "⏳ Deployment for project $($dependency.ProjectName) to $($dependency.TargetEnvironmentName) is still in progress with status $deploymentStatus.  Will check again later..."

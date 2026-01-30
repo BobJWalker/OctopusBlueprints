@@ -53,18 +53,26 @@ step "update-argo-cd-application-image-tags" {
 }
 
 step "wait-for-sync" {
-    name = "Sync and Wait"
+    name = "Wait for Autosync"
 
     action {
         action_type = "Octopus.Script"
         notes = <<-EOT
                 **Always Runs**
                 
-                Invokes the sync command on the ArgoCD instance and waits for the sync to complete.
+                Waits for the auto sync to complete in Argo.
                 EOT
         properties = {
             Octopus.Action.RunOnServer = "true"
-            Octopus.Action.Script.ScriptBody = "Write-Host \"Sync has completed.\""
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $counter = 1
+                
+                do{
+                    Write-Host "Checking sync state in 5 seconds..."
+                    start-sleep -seconds 5
+                    $counter += 1
+                } while (counter -lt 10)
+                EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
             OctopusUseBundledTooling = "False"

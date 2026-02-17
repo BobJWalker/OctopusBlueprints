@@ -1,4 +1,4 @@
-name = "Check Supply Chain"
+name = "Verify Supply Chain template is included"
 description = "Ensures the process template `Deploy Process - Scan SBOM and Build Aritfacts` is included in all deployments"
 violation_action = "block"
 violation_reason = "The process template Deploy Process - Scan SBOM and Build Artifacts is required and cannot be skipped for a deployment to any environment."

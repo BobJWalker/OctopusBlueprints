@@ -1,4 +1,5 @@
 name = "Require Azure Key Vault"
+description = "Verifies the step template that pulls secrets from Azure Key Vault instead of from Octopus."
 violation_action = "block"
 violation_reason = "Azure Key Vault is required for all deployments and runbook runs."
 

@@ -1,4 +1,5 @@
-name = "Verify Release Packages"
+name = "Verify prod-bound build artifacts come from main"
+description = "Verifies the artifacts that are deployed to test, staging, and production come from the main branch."
 violation_action = "block"
 violation_reason = "All packages deployed to test, staging, and production must be built by the main branch."
 

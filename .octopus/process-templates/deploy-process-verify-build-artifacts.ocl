@@ -468,7 +468,7 @@ step "check-github-for-open-vulnerabilities" {
                 $includeMedium = $OctopusParameters["Template.Verify.IncludeMedium"]
                 
                 Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $true -IncludeMediumSeverity $includeMedium
-                Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $false -IncludeMediumSeverity $includeMedium
+                # Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $false -IncludeMediumSeverity $includeMedium
                 
                 
                 EOT

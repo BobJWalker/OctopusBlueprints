@@ -48,6 +48,16 @@ parameter "Template.Verify.IncludeMedium" {
     value "False" {}
 }
 
+parameter "Template.Verify.Attestations" {
+    display_settings = {
+        Octopus.ControlType = "Checkbox"
+    }
+    help_text = "Checking the checkbox indicates attestations will be verified.  Uncheck it if you are in the process of adding attestations to your build pipeline."
+    label = "Verify Attestations"
+
+    value "true" {}
+}
+
 step "get-packages-and-build-information" {
     name = "Get Packages and Build Information"
 
@@ -228,7 +238,11 @@ step "attach-sbom-to-release" {
 }
 
 step "verify-docker-containers" {
+    condition = "Variable"
     name = "Run Attestation Verification on Build Artifacts"
+    properties = {
+        Octopus.Step.ConditionVariableExpression = "#{unless Octopus.Deployment.Error}#{Template.Verify.Attestations}#{/unless}"
+    }
     start_trigger = "StartWithPrevious"
 
     action {

@@ -71,7 +71,7 @@ step "wait-for-sync" {
                     Write-Host "Checking sync state in 5 seconds..."
                     start-sleep -seconds 5
                     $counter += 1
-                } while (counter -lt 10)
+                } while ($counter -lt 10)
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"

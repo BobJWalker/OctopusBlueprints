@@ -1,0 +1,7 @@
+name = "Manifest Deploy to Kubernetes - No Database"
+description = ""
+
+icon {
+    color = "#757575"
+    id = "layer-group"
+}

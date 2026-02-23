@@ -1,0 +1,406 @@
+step "azure-key-vault-retrieve-secrets" {
+    name = "Azure Key Vault - Retrieve Secrets"
+
+    action {
+        action_type = "Octopus.AzurePowerShell"
+        properties = {
+            Azure.KeyVault.RetrieveSecrets.Account = "Template.Azure.Account"
+            Azure.KeyVault.RetrieveSecrets.PrintVariableNames = "False"
+            Azure.KeyVault.RetrieveSecrets.VaultName = "bobjwalker-vault"
+            Azure.KeyVault.RetrieveSecrets.VaultSecrets = <<-EOT
+                azure-sql-server | SQLServerName
+                azure-sql-password | SQLUserPassword
+                azure-sql-username | SQLUserName
+                octopus-api-key | OctopusApiKey
+                github-token | GitHubToken
+                sumo-logic-url | SumoLogicUrl
+                slack-notifications | SlackWebhookUrl
+                traditional-app-#{Octopus.Environment.Name | ToLower} | traditionalsecret
+                EOT
+            Octopus.Action.Azure.AccountId = "#{Azure.KeyVault.RetrieveSecrets.Account}"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                $ErrorActionPreference = 'Stop'
+                
+                # Variables
+                $AzVaultModuleName = "Az.KeyVault"
+                $AzureKeyVaultName = $OctopusParameters["Azure.KeyVault.RetrieveSecrets.VaultName"]
+                $VaultSecretNames = $OctopusParameters["Azure.KeyVault.RetrieveSecrets.VaultSecrets"]
+                $AzVaultModuleSpecificVersion = $OctopusParameters["Azure.KeyVault.RetrieveSecrets.AzModule.SpecificVersion"]
+                $AzVaultModuleCustomInstallLocation = $OctopusParameters["Azure.KeyVault.RetrieveSecrets.AzModule.CustomInstallLocation"]
+                $PrintVariableNames = $OctopusParameters["Azure.KeyVault.RetrieveSecrets.PrintVariableNames"]
+                
+                # Validation
+                if ([string]::IsNullOrWhiteSpace($AzureKeyVaultName)) {
+                    throw "Required parameter Azure.KeyVault.RetrieveSecrets.VaultName not specified"
+                }
+                if ([string]::IsNullOrWhiteSpace($VaultSecretNames)) {
+                    throw "Required parameter Azure.KeyVault.RetrieveSecrets.VaultSecrets not specified"
+                }
+                
+                if ([string]::IsNullOrWhiteSpace($AzVaultModuleSpecificVersion) -eq $False) {
+                    $requiredVersion = [Version]$AzVaultModuleSpecificVersion
+                }
+                
+                # Cross-platform bits
+                $WindowsPowerShell = $True
+                if ($PSEdition -eq "Core") {
+                    $WindowsPowerShell = $False
+                }
+                
+                ### Helper functions
+                function Get-Module-CrossPlatform {
+                    [CmdletBinding()]
+                    Param(
+                        [Parameter(Mandatory = $true, Position = 0)]
+                        [string] $Name
+                    )
+                
+                    $module = Get-Module -Name $Name -ListAvailable
+                    if($WindowsPowerShell -eq $True -and $null -eq $module) {
+                        $module = Get-InstalledModule -Name $Name
+                    }
+                
+                    return $module
+                }
+                
+                $PowerShellModuleName = $AzVaultModuleName
+                
+                # Check for Custom install location specified for AzVaultModule
+                if ([string]::IsNullOrWhiteSpace($AzVaultModuleCustomInstallLocation) -eq $false) {
+                    if ((Test-Path $AzVaultModuleCustomInstallLocation -IsValid) -eq $false) {
+                        throw "The path $AzVaultModuleCustomInstallLocation is not valid, please use a relative or absolute path."
+                    }
+                    
+                    $AzVaultModulesFolder = [System.IO.Path]::GetFullPath($AzVaultModuleCustomInstallLocation)            
+                    $LocalModules = (New-Item "$AzVaultModulesFolder" -ItemType Directory -Force).FullName
+                    $env:PSModulePath = $LocalModules + [System.IO.Path]::PathSeparator + $env:PSModulePath
+                
+                    # Check to see if there
+                    if ((Test-Path -Path "$LocalModules/$AzVaultModuleName") -eq $true)
+                    {
+                        # Use specific location
+                        $PowerShellModuleName = "$LocalModules/$PowerShellModuleName"
+                    }
+                }
+                
+                # Import module
+                if([string]::IsNullOrWhiteSpace($AzVaultModuleSpecificVersion)) {
+                    Write-Host "Importing module $PowerShellModuleName ..."
+                    Import-Module -Name $PowerShellModuleName
+                }
+                else {
+                    Write-Host "Importing module $PowerShellModuleName ($AzVaultModuleSpecificVersion)..."
+                    Import-Module -Name $PowerShellModuleName -RequiredVersion $requiredVersion
+                }
+                
+                # Check if Az.Vault Module is installed.
+                $azVaultModule = Get-Module-CrossPlatform -Name $AzVaultModuleName	
+                if ($null -eq $azVaultModule) {
+                    throw "Cannot find the '$AzVaultModuleName' module on the machine. If you think it is installed, try restarting the Tentacle service for it to be detected."	
+                }
+                
+                $Secrets = @()
+                $VariablesCreated = 0
+                $StepName = $OctopusParameters["Octopus.Step.Name"]
+                
+                # Extract secret names+versions 
+                @(($VaultSecretNames -Split "`n").Trim()) | ForEach-Object {
+                    if (![string]::IsNullOrWhiteSpace($_)) {
+                        Write-Verbose "Working on: '$_'"
+                        $secretDefinition = ($_ -Split "\|")
+                        $secretName = $secretDefinition[0].Trim()
+                        $secretNameAndVersion = ($secretName -Split " ")
+                        $secretVersion = $null
+                        if($secretNameAndVersion.Count -gt 1) {
+                        	$secretName = $secretNameAndVersion[0].Trim()
+                            $secretVersion = $secretNameAndVersion[1].Trim()
+                        }
+                        if([string]::IsNullOrWhiteSpace($secretName)) {
+                            throw "Unable to establish secret name from: '$($_)'"
+                        }
+                        $secret = [PsCustomObject]@{
+                            Name         = $secretName
+                            SecretVersion= $secretVersion
+                            VariableName = if (![string]::IsNullOrWhiteSpace($secretDefinition[1])) { $secretDefinition[1].Trim() } else { "" }
+                        }
+                        $Secrets += $secret
+                    }
+                }
+                
+                Write-Verbose "Vault Name: $AzureKeyVaultName"
+                Write-Verbose "Print variables: $PrintVariableNames"
+                Write-Verbose "Secrets to retrieve: $($Secrets.Count)"
+                Write-Verbose "Az Version specified: $AzVaultModuleSpecificVersion"
+                Write-Verbose "Az Custom Install Dir: $AzVaultModuleCustomInstallLocation"
+                
+                # Retrieve Secrets
+                foreach($secret in $secrets) {
+                    $name = $secret.Name
+                    $secretVersion = $secret.SecretVersion
+                    $variableName = $secret.VariableName
+                    if ([string]::IsNullOrWhiteSpace($variableName)) {
+                        $variableName = "$($AzureKeyVaultName.Trim()).$($name.Trim())"
+                    }
+                    
+                    if ([string]::IsNullOrWhiteSpace($secretVersion)) {
+                    	$azSecretValue = Get-AzKeyVaultSecret -VaultName $AzureKeyVaultName -Name $name -AsPlainText    
+                    }
+                    else {
+                    	$azSecretValue = Get-AzKeyVaultSecret -VaultName $AzureKeyVaultName -Name $name -Version $secretVersion -AsPlainText
+                    }
+                    
+                    Set-OctopusVariable -Name $variableName -Value $azSecretValue -Sensitive
+                
+                    if($PrintVariableNames -eq $True) {
+                        Write-Host "Created output variable: ##{Octopus.Action[$StepName].Output.$variableName}"
+                    }
+                    $VariablesCreated += 1
+                }
+                
+                Write-Host "Created $variablesCreated output variables"
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{Template.Worker.Pool}"
+
+        community_action_template_snapshot {
+            id = "CommunityActionTemplates-62"
+            version = 2
+
+            parameter "Azure.KeyVault.RetrieveSecrets.Account" {
+                display_settings = {
+                    Octopus.ControlType = "AzureAccount"
+                }
+                help_text = "An Azure account with permissions to retrieve secrets from the Azure Key Vault."
+                label = "Azure Account"
+                default_value = ""
+            }
+
+            parameter "Azure.KeyVault.RetrieveSecrets.VaultName" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = "The name of the Azure Key Vault to retrieve secrets from."
+                label = "Vault Name"
+                default_value = ""
+            }
+
+            parameter "Azure.KeyVault.RetrieveSecrets.VaultSecrets" {
+                display_settings = {
+                    Octopus.ControlType = "MultiLineText"
+                }
+                help_text = <<-EOT
+                        Specify the names of the Secrets to be returned from Azure Key Vault, in the format `SecretName SecretVersion | OutputVariableName` where:
+                        
+                        - `SecretName` is the name of the Secret to retrieve.
+                        - `SecretVersion` is the _optional_ version of the Secret to retrieve. *If this value isn't specified, the latest version will be retrieved*.
+                        - `OutputVariableName` is the _optional_ Octopus [output variable](https://octopus.com/docs/projects/variables/output-variables) name to store the secret's value in. *If this value isn't specified, an output name will be generated dynamically*.
+                        
+                        **Note:** Multiple fields can be retrieved by entering each one on a new line.
+                        EOT
+                label = "Vault Secrets to retrieve"
+                default_value = ""
+            }
+
+            parameter "Azure.KeyVault.RetrieveSecrets.PrintVariableNames" {
+                display_settings = {
+                    Octopus.ControlType = "Checkbox"
+                }
+                help_text = "Write out the Octopus [output variable](https://octopus.com/docs/projects/variables/output-variables) names to the task log. Default: `False`."
+                label = "Print output variable names"
+                default_value = "False"
+            }
+
+            parameter "Azure.KeyVault.RetrieveSecrets.AzModule.SpecificVersion" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = <<-EOT
+                        If you wish to use a specific version of the `Az` PowerShell module (rather than the default), enter the version number here. e.g. `5.9.0`.
+                        
+                        **Note:** The version specified must exist on the machine.
+                        
+                        EOT
+                label = "Az PowerShell Module version (optional)"
+                default_value = ""
+            }
+
+            parameter "Azure.KeyVault.RetrieveSecrets.AzModule.CustomInstallLocation" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = <<-EOT
+                        If you wish to provide a custom path to the `Az` PowerShell module (rather than the default), enter the value here.
+                        
+                        **Note:** The Module must exist at the specified location on the machine. This step template will not download the Module.
+                        
+                        EOT
+                label = "Az PowerShell Install Location (optional)"
+                default_value = ""
+            }
+        }
+    }
+}
+
+process_template "verify-supply-chain" {
+    name = "Verify Supply Chain"
+    process_template_slug = "deploy-process-verify-build-artifacts"
+    version_mask = "2.X"
+
+    parameter "Template.SBOM.Artifact" {
+        value = "Template.SBOM.Artifact"
+    }
+
+    parameter "Template.Git.AuthToken" {
+        value = "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.GitHubToken}"
+    }
+
+    parameter "Template.Verify.WorkerPool" {
+        value = "#{Template.Worker.Pool}"
+    }
+
+    parameter "Template.Verify.ExecutionContainerFeed" {
+        value = "#{Template.ExecutionContainer.Feed}"
+    }
+
+    parameter "Template.Verify.Attestations" {
+        value = "False"
+    }
+}
+
+step "slack-send-simple-notification" {
+    name = "Slack - Send Simple Notification"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $payload = @{
+                    channel = $OctopusParameters['ssn_Channel']
+                    username = $OctopusParameters['ssn_Username'];
+                    icon_url = $OctopusParameters['ssn_IconUrl'];
+                    link_names = "true";
+                    attachments = @(
+                        @{
+                            mrkdwn_in = $('pretext', 'text');
+                            pretext = $OctopusParameters['ssn_Title'];
+                            text = $OctopusParameters['ssn_Message'];
+                            color = $OctopusParameters['ssn_Color'];
+                        }
+                    )
+                }
+                
+                try {
+                	[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls11 -bor [System.Net.SecurityProtocolType]::Tls12
+                    if ($PSVersionTable.PSVersion.Major -ge 6)
+                    {
+                        Invoke-Restmethod -Method POST -Body ($payload | ConvertTo-Json -Depth 4) -Uri $OctopusParameters['ssn_HookUrl']
+                    }
+                    else
+                    {
+                        Invoke-Restmethod -Method POST -Body ($payload | ConvertTo-Json -Depth 4) -Uri $OctopusParameters['ssn_HookUrl'] -UseBasicParsing
+                    }
+                } catch {
+                    Write-Host "An error occurred while attempting to send Slack notification"
+                    Write-Host $_.Exception
+                    Write-Host $_
+                    throw
+                }
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            ssn_Channel = "trident-status"
+            ssn_Color = "good"
+            ssn_IconUrl = "https://octopus.com/content/resources/favicon.png"
+            ssn_Message = "You can view the task here: #{Octopus.Web.ServerUri}/app#/#{Octopus.Space.Id}/tasks/#{Octopus.Task.Id}"
+            ssn_Title = "#{Octopus.Project.Name} #{Octopus.Release.Number} to #{Octopus.Environment.Name} has #{if Octopus.Deployment.Error}failed#{else}completed successfully#{/if}"
+            ssn_Username = "Octopus Deploy"
+        }
+        worker_pool_variable = "#{Template.Worker.Pool}"
+
+        community_action_template_snapshot {
+            id = "CommunityActionTemplates-374"
+            version = 15
+
+            parameter "ssn_HookUrl" {
+                display_settings = {
+                    Octopus.ControlType = "Sensitive"
+                }
+                help_text = "The Webhook URL provided by Slack, including token."
+                label = "Hook URL"
+                default_value = ""
+            }
+
+            parameter "ssn_Channel" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = "Which Slack channel to post notification to."
+                label = "Channel handle"
+                default_value = ""
+            }
+
+            parameter "ssn_IconUrl" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = "The icon shown in Slack against the notification."
+                label = "Icon URL"
+                default_value = "https://octopus.com/content/resources/favicon.png"
+            }
+
+            parameter "ssn_Username" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = "The username shown in Slack against the notification."
+                label = "Username"
+                default_value = "Octopus Deploy"
+            }
+
+            parameter "ssn_Title" {
+                display_settings = {
+                    Octopus.ControlType = "SingleLineText"
+                }
+                help_text = <<-EOT
+                        The title of the notification in Slack.
+                        
+                        Supported formatting includes: ` ```pre``` `, `_italic_`, `*bold*`, and even `~strike~`.
+                        EOT
+                label = "Title"
+                default_value = ""
+            }
+
+            parameter "ssn_Message" {
+                display_settings = {
+                    Octopus.ControlType = "MultiLineText"
+                }
+                help_text = <<-EOT
+                        The body of the notification in Slack.
+                        
+                        Supported formatting includes: ` ```pre``` `, `_italic_`, `*bold*`, and even `~strike~`.
+                        EOT
+                label = "Message"
+                default_value = ""
+            }
+
+            parameter "ssn_Color" {
+                display_settings = {
+                    Octopus.ControlType = "Select"
+                    Octopus.SelectOptions = <<-EOT
+                        good|Green
+                        warning|Orange
+                        danger|Red
+                        EOT
+                }
+                help_text = "Like traffic signals, color-coding messages can quickly communicate intent and help separate them from the flow of other messages in the timeline."
+                label = "Color"
+                default_value = "good"
+            }
+        }
+    }
+}

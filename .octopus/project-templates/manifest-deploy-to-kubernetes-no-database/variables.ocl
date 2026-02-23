@@ -1,0 +1,23 @@
+variable "Template.K8s.Hostname.Prefix" {
+    value "#{Octopus.Project.Name | ToLower | Replace \" \" \"-\"}" {}
+}
+
+variable "Template.K8s.HostName" {
+    value "#{Template.K8s.Hostname.Prefix}#{Octopus.Environment.Name | ToLower }.bobjwalker.local" {}
+}
+
+variable "metadata:namespace" {
+    value "#{Template.K8s.Namespace}" {}
+}
+
+variable "spec:hostnames:0" {
+    value "#{Template.K8s.Namespace}" {}
+}
+
+variable "Template.K8s.Namespace" {
+    value "#{Template.K8s.Hostname.Prefix}-#{Octopus.Environment.Name | ToLower }" {}
+}
+
+variable "spec:template:spec:containers:0:image" {
+    value "bobjwalker99/hello-containers:#{Octopus.Action[Deploy Web App-Deploy Container].Package[K8sTemplate.Container].PackageVersion}" {}
+}

@@ -35,6 +35,7 @@ step "update-argo-cd-application-image-tags" {
         properties = {
             Octopus.Action.ArgoCD.CommitMessageSummary = "Octopus #{Octopus.Environment.Name} manifest image tag to #{Octopus.Release.Number}"
             Octopus.Action.ArgoCD.CommitMethod = "DirectCommit"
+            Octopus.Action.ArgoCD.Sync.Mode = "AllEnvironments"
         }
         worker_pool_variable = "#{Template.Worker.Pool}"
 

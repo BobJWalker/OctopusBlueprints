@@ -271,6 +271,36 @@ process_template "verify-supply-chain" {
     }
 }
 
+process_template "deploy-to-kubernetes" {
+    name = "Deploy to Kubernetes"
+    process_template_slug = "deploy-process-deploy-to-kubernetes-via-manifest"
+    version_mask = "1.X"
+
+    parameter "K8sTemplate.Target.Tag" {
+        value = "#{Template.Target.Tag}"
+    }
+
+    parameter "K8sTemplate.Container" {
+        value = "Template.Container"
+    }
+
+    parameter "K8sTemplate.Namespace" {
+        value = "#{Template.K8s.Namespace}"
+    }
+
+    parameter "K8sTemplate.Git.Repo" {
+        value = "#{Template.Git.Repo}"
+    }
+
+    parameter "K8sTemplate.Verification.Script.Path" {
+        value = "scripts/verifyDeployment.ps1"
+    }
+
+    parameter "K8sTemplate.Worker.Pool" {
+        value = "#{Template.Worker.Pool}"
+    }
+}
+
 step "slack-send-simple-notification" {
     name = "Slack - Send Simple Notification"
 

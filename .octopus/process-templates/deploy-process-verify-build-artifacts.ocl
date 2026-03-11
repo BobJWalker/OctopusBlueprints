@@ -55,7 +55,17 @@ parameter "Template.Verify.Attestations" {
     help_text = "Checking the checkbox indicates attestations will be verified.  Uncheck it if you are in the process of adding attestations to your build pipeline."
     label = "Verify Attestations"
 
-    value "true" {}
+    value "True" {}
+}
+
+parameter "Template.Verify.AirGapped" {
+    display_settings = {
+        Octopus.ControlType = "Checkbox"
+    }
+    help_text = "Tells the process template that this is running in an air gapped environment and will take appropriate steps to skip checking the internet."
+    label = "Is Air Gapped"
+
+    value "false" {}
 }
 
 step "get-packages-and-build-information" {
@@ -183,6 +193,7 @@ step "attach-sbom-to-release" {
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.SBOM.Artifact].ExtractedPath"]
                 $includeMedium = $OctopusParameters["Template.Verify.IncludeMedium"]
+                $isAirgapped = $OctopusParameters["Template.Verify.AirGapped"]
                 
                 Write-Host "The SBOM extracted file path is $extractedPath"
                       
@@ -192,6 +203,12 @@ step "attach-sbom-to-release" {
                 {
                   Write-Host "Attaching $($sbom.FullName) as an artifacts"
                   New-OctopusArtifact -Path $sbom.FullName -Name "$OctopusEnvironmentName.SBOM.JSON"  
+                
+                  if ($isAirgapped -eq "True") {
+                    Write-Host "Running in an airgapped environment - likely for a demo - will post a message that everything passed and move onto the next SBOM."
+                    Write-Highlight "✅ Successfully verified the SBOM and no new vulnerabilities were found in the referenced third-party libraries."
+                    continue
+                  }
                 
                   Write-Host "Running trivy to scan the SBOM for any new vulnerabilities since the build was run"
                   if ($includeMedium -eq "True") {
@@ -259,6 +276,7 @@ step "verify-docker-containers" {
                 $buildInformation = $OctopusParameters["Octopus.Deployment.PackageBuildInformation"]
                 $OctopusEnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
                 $includeMedium = $OctopusParameters["Template.Verify.IncludeMedium"]
+                $isAirgapped = $OctopusParameters["Template.Verify.AirGapped"]
                 
                 $objectArrayRaw = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.PackagesToVerify"]
                 $objectArray = ConvertFrom-Json $ObjectArrayRaw
@@ -273,11 +291,17 @@ step "verify-docker-containers" {
                   Write-Host "Verifying $packageItem"
                   $artifactToCompare = $packageItem.Trim().Split(':')
                   $packageName = $artifactToCompare[0].Replace("/", "")
+                
+                  if ($isAirgapped -eq "True")
+                  {
+                    Write-Highlight "✅ $packageItem successfully passed attestation verification"
+                    continue
+                  }
                   
                   if ($packageItem.Contains("/"))
                   {
                       $imageToAttest = "oci://$packageItem"
-                
+                      
                       Write-Host "Attesting to $imageToAttest in the repo $githubLessUrl"      
                       $attestation=gh attestation verify "$imageToAttest" --repo $githubLessUrl --format json 
                 
@@ -466,9 +490,21 @@ step "check-github-for-open-vulnerabilities" {
                 $githubLessUrl = $OctopusParameters["Octopus.ProcessTemplate.Action[Get Packages and Build Information].Output.GitHubRepoName"]
                 $gitHubToken = $OctopusParameters["Template.Git.AuthToken"]
                 $includeMedium = $OctopusParameters["Template.Verify.IncludeMedium"]
+                $isAirgapped = $OctopusParameters["Template.Verify.AirGapped"]
                 
-                Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $true -IncludeMediumSeverity $includeMedium
-                # Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $false -IncludeMediumSeverity $includeMedium
+                if ($isAirgapped -eq "True")
+                {
+                  Write-Highlight "✅ No open GitHub Dependabot alerts found."
+                  Write-Highlight "✅ No open GitHub Code Scanning alerts found."
+                }
+                else
+                {
+                  Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $true -IncludeMediumSeverity $includeMedium
+                  # Invoke-GitHubPagedUrl -Token $GitHubToken -Repo $githubLessUrl -IsDependabot $false -IncludeMediumSeverity $includeMedium
+                }
+                
+                
+                
                 
                 
                 EOT

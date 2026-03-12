@@ -1,2 +1,33 @@
 name = "Notification - Emails"
 description = "Process template that will send standard email notifications to specified individuals."
+
+parameter "Template.EmailTeam" {
+    display_settings = {
+        Octopus.ControlType = "Teams"
+    }
+    help_text = "The team of recipients to receive this email notification."
+    label = "Email Recipients "
+}
+
+parameter "Template.ManualIntervention" {
+    display_settings = {
+        Octopus.ControlType = "Checkbox"
+    }
+    help_text = "Indicates if this email is being sent as part of a manual intervention."
+    label = "Is Manual Intervention"
+
+    value "false" {}
+}
+
+step "send-email-notification" {
+    name = "Send Email Notification"
+
+    action {
+        action_type = "Octopus.Email"
+        properties = {
+            Octopus.Action.Email.Body = "You can view the task here: #{Octopus.Web.ServerUri}/app#/#{Octopus.Space.Id}/tasks/#{Octopus.Task.Id}"
+            Octopus.Action.Email.Subject = "#{Octopus.Project.Name} #{if Octopus.Runbook.Id}#{Octopus.Runbook.Name}#{else}#{Octopus.Release.Number}#{/if} to #{Octopus.Environment.Name}#{if Octopus.Deployment.Tenant.Name} for #{Octopus.Deployment.Tenant.Name}#{else}#{if Octopus.Runbook.Tenant.Name} for #{Octopus.Runbook.Tenant.Name}#{/if}#{/if} has #{if Template.ManualIntervention}paused and waiting intervention#{else}#{if Octopus.Deployment.Error}failed#{else}completed successfully#{/if}#{/if}"
+            Octopus.Action.Email.ToTeamIds = "#{Template.EmailTeam}"
+        }
+    }
+}

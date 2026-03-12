@@ -1,6 +1,11 @@
 name = "Notification - Emails"
 description = "Process template that will send standard email notifications to specified individuals."
 
+icon {
+    color = "#757575"
+    id = "envelope"
+}
+
 parameter "Template.EmailTeam" {
     display_settings = {
         Octopus.ControlType = "Teams"

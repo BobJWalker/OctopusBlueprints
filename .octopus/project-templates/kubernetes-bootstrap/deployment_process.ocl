@@ -1,0 +1,285 @@
+step "create-namespaces" {
+    name = "Create Namespaces"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesDeployRawYaml"
+        properties = {
+            Octopus.Action.Kubernetes.DeploymentTimeout = "180"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                apiVersion: v1
+                kind: Namespace
+                metadata:
+                  name: traefik
+                ---
+                apiVersion: v1
+                kind: Namespace
+                metadata:
+                  name: argocd
+                ---
+                apiVersion: v1
+                kind: Namespace
+                metadata:
+                  name: mailpit
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+        }
+        worker_pool_variable = "#{Template.K8s.WorkerPool}"
+    }
+}
+
+step "deploy-mailpit" {
+    name = "Deploy Mailpit"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesDeployRawYaml"
+        properties = {
+            Octopus.Action.Kubernetes.DeploymentTimeout = "180"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: mailpit
+                  labels:
+                    app: mailpit
+                spec:
+                  replicas: 1
+                  selector:
+                    matchLabels:
+                      app: mailpit
+                  template:
+                    metadata:
+                      labels:
+                        app: mailpit
+                    spec:
+                      containers:
+                      - name: mailpit
+                        image: axllent/mailpit:latest
+                        ports:
+                        - containerPort: 1025
+                          name: smtp
+                        - containerPort: 8025
+                          name: http
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  labels:
+                    app: mailpit-nodeport
+                  name: mailpit-nodeport
+                  namespace: mailpit
+                spec:
+                  ports:
+                  - nodePort: 31025
+                    port: 31025
+                    protocol: TCP
+                    targetPort: 1025
+                    name: smtp
+                  - nodePort: 32025
+                    port: 32025
+                    protocol: TCP
+                    targetPort: 8025
+                    name: gui
+                  selector:
+                    app: mailpit
+                  type: NodePort
+                EOT
+            Octopus.Action.KubernetesContainers.Namespace = "mailpit"
+            Octopus.Action.Script.ScriptSource = "Inline"
+        }
+        worker_pool_variable = "#{Template.K8s.WorkerPool}"
+    }
+}
+
+step "deploy-traefik" {
+    name = "Deploy Traefik"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
+    }
+
+    action {
+        action_type = "Octopus.HelmChartUpgrade"
+        properties = {
+            Octopus.Action.Helm.Namespace = "traefik"
+            Octopus.Action.Helm.ReleaseName = "traefik"
+            Octopus.Action.Helm.ResetValues = "True"
+            Octopus.Action.Helm.TemplateValuesSources = <<-EOT
+                [
+                  {
+                    "Type": "InlineYaml",
+                    "Value": "ports:\n  web:\n    port: #{Project.Web.EntryPort}        # Service port\n    targetPort: #{Project.Web.EntryPort}  # Container port matches entryPoint\n    protocol: TCP\n  websecure:\n    port: #{Project.SSL.EntryPort}\n    targetPort: #{Project.SSL.EntryPort}\n    protocol: TCP\n  traefik:\n    port: 8000\n    targetPort: 8000\n    protocol: TCP\n  metrics:\n    port: 9100\n    targetPort: 9100\n    protocol: TCP\n\nentryPoints:\n  web:\n    address: \":#{Project.Web.EntryPort}\"       # Must match ports.web.targetPort\n  websecure:\n    address: \":#{Project.SSL.EntryPort}\"      # Must match ports.websecure.targetPort\n  traefik:\n    address: \":8000\"\n  metrics:\n    address: \":9100\"\n\nproviders:\n  kubernetesGateway:\n    enabled: true\n\ndashboard:\n  enabled: true\n\nservice:\n  type: LoadBalancer\n  externalTrafficPolicy: Cluster\n\nadditionalArguments:\n  - \"--log.level=INFO\""
+                  }
+                ]
+                EOT
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Script.ScriptSource = "Package"
+        }
+        worker_pool_variable = ""
+
+        packages {
+            acquisition_location = "Server"
+            properties = {
+                PackageParameterName = "Template.Argo.Package"
+                SelectionMode = "deferred"
+                ValuesFilePath = ""
+            }
+        }
+    }
+}
+
+step "configure-traefik-gateway" {
+    name = "Configure Traefik Gateway"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesDeployRawYaml"
+        properties = {
+            Octopus.Action.Kubernetes.DeploymentTimeout = "180"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                apiVersion: gateway.networking.k8s.io/v1
+                kind: GatewayClass
+                metadata:
+                  name: traefik
+                spec:
+                  controllerName: traefik.io/gateway-controller
+                ---
+                apiVersion: gateway.networking.k8s.io/v1
+                kind: Gateway
+                metadata:
+                  name: public-gateway
+                  namespace: traefik
+                spec:
+                  gatewayClassName: traefik
+                  listeners:
+                    - name: http
+                      protocol: HTTP
+                      port: #{Project.Web.EntryPort}
+                      hostname: '*.bobjwalker.local'
+                      allowedRoutes:
+                        namespaces:
+                          from: All
+                    - name: https
+                      protocol: HTTPS
+                      port: #{Project.SSL.EntryPort}
+                      hostname: '*.bobjwalker.local'
+                      allowedRoutes:
+                        namespaces:
+                          from: All
+                EOT
+            Octopus.Action.KubernetesContainers.Namespace = "traefik"
+            Octopus.Action.Script.ScriptSource = "Inline"
+        }
+        worker_pool_variable = "#{Template.K8s.WorkerPool}"
+    }
+}
+
+step "deploy-argo-cd" {
+    name = "Deploy Argo CD"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesDeployRawYaml"
+        properties = {
+            Octopus.Action.Kubernetes.DeploymentTimeout = "360"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
+            Octopus.Action.KubernetesContainers.Namespace = "argocd"
+            Octopus.Action.Script.ScriptSource = "Package"
+        }
+        worker_pool_variable = "#{Template.K8s.WorkerPool}"
+
+        packages {
+            acquisition_location = "Server"
+            properties = {
+                PackageParameterName = "Template.Argo.Package"
+                SelectionMode = "deferred"
+            }
+        }
+    }
+}
+
+step "configure-argo-cd" {
+    name = "Configure Argo CD"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesRunScript"
+        properties = {
+            Octopus.Action.KubernetesContainers.Namespace = "argocd"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                kubectl -n argocd patch deployment argocd-server \
+                  --type='json' \
+                  -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value":"--insecure"}]'
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+        }
+        worker_pool_variable = "#{Template.K8s.WorkerPool}"
+    }
+}
+
+step "configure-argo-cd-gateway" {
+    name = "Configure Argo CD Gateway"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesDeployRawYaml"
+        properties = {
+            Octopus.Action.Kubernetes.DeploymentTimeout = "180"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                apiVersion: gateway.networking.k8s.io/v1
+                kind: HTTPRoute
+                metadata:
+                  name: argocd-route
+                  namespace: argocd
+                spec:
+                  hostnames:
+                    - argocd.bobjwalker.local
+                  parentRefs:
+                    - group: gateway.networking.k8s.io
+                      kind: Gateway
+                      name: public-gateway
+                      namespace: traefik
+                  rules:
+                    - matches:
+                        - path:
+                            type: PathPrefix
+                            value: /
+                      backendRefs:
+                        - kind: Service
+                          name: argocd-server
+                          port: #{Project.Web.EntryPort}   # HTTP
+                          weight: 1
+                EOT
+            Octopus.Action.KubernetesContainers.Namespace = "argocd"
+            Octopus.Action.Script.ScriptSource = "Inline"
+        }
+        worker_pool_variable = ""
+    }
+}

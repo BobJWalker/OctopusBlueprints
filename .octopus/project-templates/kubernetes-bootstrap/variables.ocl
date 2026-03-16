@@ -1,0 +1,7 @@
+variable "Project.Web.EntryPort" {
+    value "#{Template.Web.EntryPort}" {}
+}
+
+variable "Project.SSL.EntryPort" {
+    value "#{Template.SSL.EntryPort}" {}
+}

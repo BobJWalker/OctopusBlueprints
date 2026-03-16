@@ -1,0 +1,51 @@
+parameter "Template.K8s.Target" {
+    display_settings = {
+        Octopus.ControlType = "TargetTags"
+    }
+    help_text = "The Kubernetes cluster(s) to deploy to."
+    label = "Kubernetes Target"
+}
+
+parameter "Template.K8s.WorkerPool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "Where the execution will run any steps that need to run outside of K8s"
+    label = "Kubernetes Worker Pool"
+}
+
+parameter "Template.Traefik.Helm.Feed" {
+    display_settings = {
+        Octopus.ControlType = "Feed"
+    }
+    help_text = "The external container feed pointing to `https://traefik.github.io/charts`"
+    label = "Traefik Helm Feed"
+}
+
+parameter "Template.SSL.EntryPort" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The SSL entry port for traefik"
+    label = "Traefik SSL Entry Port"
+
+    value "8444" {}
+}
+
+parameter "Template.Web.EntryPort" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The web (non-SSL) entry port for Traefik"
+    label = "Traefik Web Entry Port"
+
+    value "8080" {}
+}
+
+parameter "Template.Argo.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The Argo Package coming from GitHub releases."
+    label = "Argo Package"
+}

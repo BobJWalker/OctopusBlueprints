@@ -14,12 +14,12 @@ parameter "Template.K8s.WorkerPool" {
     label = "Kubernetes Worker Pool"
 }
 
-parameter "Template.Traefik.Helm.Feed" {
+parameter "Template.Traefik.Package" {
     display_settings = {
-        Octopus.ControlType = "Feed"
+        Octopus.ControlType = "Package"
     }
-    help_text = "The external container feed pointing to `https://traefik.github.io/charts`"
-    label = "Traefik Helm Feed"
+    help_text = "The Traefik package that comes `https://traefik.github.io/charts`"
+    label = "Traefik Package"
 }
 
 parameter "Template.SSL.EntryPort" {
@@ -46,6 +46,6 @@ parameter "Template.Argo.Package" {
     display_settings = {
         Octopus.ControlType = "Package"
     }
-    help_text = "The Argo Package coming from GitHub releases."
+    help_text = "The Argo Package coming from GitHub releases (`https://api.github.com`)"
     label = "Argo Package"
 }

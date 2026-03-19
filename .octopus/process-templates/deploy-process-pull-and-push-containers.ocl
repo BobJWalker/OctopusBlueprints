@@ -1,0 +1,74 @@
+name = "Deploy Process - Pull and Push Containers"
+description = "Process that will pull containers from docker hub and push it to the local registry"
+
+parameter "Template.Docker.Feed" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = ""
+    label = "Docker Container"
+}
+
+parameter "Template.Worker.Pool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = ""
+    label = "Worker Pool"
+}
+
+parameter "Template.New.Registry" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The name of the new registry to push the container to, for example `localhost:32000`"
+    label = "New Registry Name"
+
+    value "localhost:32000" {}
+}
+
+step "pull-and-push" {
+    name = "Pull and Push"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $containerToDownload = "$($OctopusParameters["Octopus.Action.Package[Template.Docker.Feed].PackageId"]):$($OctopusParameters["Octopus.Action.Package[Template.Docker.Feed].PackageVersion"])"
+                $newRegistry = $OctopusParameters["Template.New.Registry"]
+                
+                Write-Host "Downloading $containerToDownload from Docker"
+                nerdctl pull -q $containerToDownload
+                
+                $newContainerName = "$newRegistry/$($OctopusParameters["Octopus.Action.Package[Template.Docker.Feed].PackageId"]):$($OctopusParameters["Octopus.Action.Package[Template.Docker.Feed].PackageVersion"])"
+                $newContainerLatestName = "$newRegistry/$($OctopusParameters["Octopus.Action.Package[Template.Docker.Feed].PackageId"]):latest"
+                
+                Write-Host "Tagging $containerToDownload as $newContainerName"
+                nerdctl tag $containerToDownload $newContainerName
+                
+                Write-Host "Tagging $containerToDownload as $newContainerLatestName"
+                nerdctl tag $containerToDownload $newContainerLatestName
+                
+                Write-Host "Pushing $newContainerName"
+                nerdctl push $newContainerName
+                nerdctl push $newContainerLatestName
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{Template.Worker.Pool}"
+
+        packages "Template.Docker.Feed" {
+            acquisition_location = "NotAcquired"
+            feed = "octopus-server-built-in"
+            package_id = ""
+            properties = {
+                Extract = "True"
+                PackageParameterName = "Template.Docker.Feed"
+                SelectionMode = "deferred"
+            }
+        }
+    }
+}

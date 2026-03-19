@@ -294,6 +294,8 @@ step "deploy-traefik" {
 
         packages {
             acquisition_location = "Server"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 PackageParameterName = "Template.Traefik.Package"
                 SelectionMode = "deferred"
@@ -363,7 +365,18 @@ step "deploy-argo-cd" {
         action_type = "Octopus.KubernetesRunScript"
         properties = {
             Octopus.Action.KubernetesContainers.Namespace = "argocd"
-            Octopus.Action.Script.ScriptBody = "kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                try
+                {
+                  kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+                }
+                catch
+                {
+                  Write-Host "There was a problem running kubectl account"
+                }
+                
+                exit 0
+                EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"
         }

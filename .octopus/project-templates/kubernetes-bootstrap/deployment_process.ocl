@@ -94,7 +94,7 @@ step "deploy-registry" {
                     spec:
                       containers:
                         - name: registry
-                          image: registry:2
+                          image: #{Octopus.Action.Package[Template.Registry.Package].PackageId}/#{Octopus.Action.Package[Template.Registry.Package].PackageVersion}
                           ports:
                             - containerPort: 5000
                           volumeMounts:
@@ -126,6 +126,17 @@ step "deploy-registry" {
             Octopus.Action.Script.ScriptSource = "Inline"
         }
         worker_pool_variable = "#{Template.K8s.WorkerPool}"
+
+        packages "Template.Registry.Package" {
+            acquisition_location = "NotAcquired"
+            package_id = ""
+            properties = {
+                Extract = "false"
+                PackageParameterName = "Template.Registry.Package"
+                Purpose = "DockerImageReference"
+                SelectionMode = "deferred"
+            }
+        }
     }
 }
 
@@ -198,6 +209,7 @@ step "deploy-mailpit" {
 
         packages "Template.MailPit.Package" {
             acquisition_location = "NotAcquired"
+            feed = "octopus-server-built-in"
             package_id = ""
             properties = {
                 Extract = "false"
@@ -327,6 +339,8 @@ step "install-argo-via-helm" {
 
         packages {
             acquisition_location = "Server"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 PackageParameterName = "Template.Argo.Package"
                 SelectionMode = "deferred"

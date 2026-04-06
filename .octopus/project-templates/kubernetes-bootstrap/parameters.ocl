@@ -46,6 +46,30 @@ parameter "Template.Argo.Package" {
     display_settings = {
         Octopus.ControlType = "Package"
     }
-    help_text = "The Argo Package coming from GitHub releases (`https://api.github.com`)"
+    help_text = "The Argo Helm Chart coming from (`https://argoproj.github.io/argo-helm`)"
     label = "Argo Package"
+}
+
+parameter "Template.MailPit.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The container for Mailpit coming from DockerHub"
+    label = "Mailpit Docker Container"
+}
+
+parameter "Template.Redis.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The container for Redis coming from Docker Hub"
+    label = "Redis Docker Container"
+}
+
+parameter "Template.DexIDP.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The container for Dex IDP coming from Docker Hub"
+    label = "Dex IDP Docker Container"
 }

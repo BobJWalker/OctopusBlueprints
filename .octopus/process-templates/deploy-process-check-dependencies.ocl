@@ -54,6 +54,7 @@ parameter "Template.Dependency.Projects" {
                 "spaceName": "Default",
                 "projectName": "TAWA",
                 "deployGroup": 2
+                "dependencyAction": "Continue"
               }
             ]
             ```
@@ -65,6 +66,11 @@ parameter "Template.Dependency.Projects" {
             - deployGroup - **Optional** Projects in the same deploy group will be deployed concurrently.  Items in different deploy groups will be deployed sequentially.  If omitted all dependencies are deployed sequentially.  
             - spaceName - **Optional** uses the current space if not provided.
             - tenantName - **Optional** the name of the tenant to deploy.  If not specified will use the current tenant being deployed (if doing a tenanted deployment)
+            - dependencyAction - **Optional** overrides the default dependency action parameter.  For example, if you want to continue for a specific dependency but stop for all other dependencies.  The options are: 
+                - `Stop` which will stop the deployment
+                - `Continue` which will continue the deploy
+                - `DeployNoMatchingInTarget` which will deploy only when no matching found
+                - `DeployNewerMatching` which will deploy only when newer matching found
             
             The minimum version follows Node's versioning scheme.  But it includes support for four digits (1.2.3.4) as well as three (1.2.3).  Any pre-release tags are removed prior to comparison.
             
@@ -99,8 +105,10 @@ parameter "Template.Dependency.Action" {
             
             - Test 1 - The latest version in Production is 4.1.2 and in Test it is 4.5.7.  Deploy when newer will deploy 4.5.7.  Deploy when no matching will deploy 4.5.7.
             - Test 2 - The latest version in Production is 4.5.3 and in test it is 4.5.7.  Deploy when newer will deploy 4.5.7.  Deploy when no matching WILL NOT deploy 4.5.7 because 4.5.3 matches the pattern >4.5.2.
+            
+            **Important**: This can be overridden in the `Project Dependencies` JSON object.
             EOT
-    label = "Dependency Action"
+    label = "Default Dependency Action"
 
     value "Stop" {}
 }
@@ -827,21 +835,21 @@ step "check-dependencies" {
                     {        
                         $reason = "✅ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern) and is the latest version.  No deployment needed for $($dependency.ProjectName)."        
                     }
-                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and ($dependencyAction -eq "Stop" -or $dependencyAction -eq "Continue"))
+                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and ($dependencyAction.ToLower().Trim() -eq "stop" -or $dependencyAction.ToLower().Trim() -eq "continue"))
                     {        
                         $reason = "✅ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The requirements are met and no deployment was requested, so no deployment will be performed on $($dependency.ProjectName)."        
                     }    
-                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction -eq "DeployNoMatchingInTarget")
+                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction.ToLower().Trim() -eq "deploynomatchingintarget")
                     {        
                         $reason = "✅ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The action is to only deploy when there is nothing matching in $($environment.Name), so no deployment will be performed on any dependencies."        
                     }
-                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction -eq "DeployNewerMatching" -and $approvalRequested -eq "Yes")
+                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction.ToLower().Trim() -eq "deploynewermatching" -and $approvalRequested -eq "Yes")
                     {        
                         $approvalRequired = $true
                         $deploymentIsNeeded = $true
                         $reason = "⚠️ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The dependency action is set to Deploy Newer Matching, so $($sourceVersionToDeploy) will be deployed.  Approval is required to continue."
                     }    
-                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction -eq "DeployNewerMatching" -and $approvalRequested -eq "No")
+                    elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $dependencyAction.ToLower().Trim() -eq "deploynewermatching" -and $approvalRequested -eq "No")
                     {                
                         $deploymentIsNeeded = $true
                         $reason = "⚠️ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The dependency action is set to Deploy Newer Matching and approval is not requested, so $($sourceVersionToDeploy) will be deployed without approval."
@@ -865,6 +873,33 @@ step "check-dependencies" {
                     }
                 }
                 
+                function Get-DependencyAction {
+                    param(
+                        $dependencyAction,
+                        $defaultDependencyAction
+                    )
+                
+                    if ($null -ne $dependencyAction)
+                    {
+                        Write-Verbose "The dependency action passed in was $null, returning the default dependency action to use for this dependency check"
+                        return $defaultDependencyAction
+                    }
+                
+                    if ([string]::IsNullOrWhiteSpace($dependencyAction))
+                    {
+                        Write-Verbose "The dependency action passed in was an empty string, returning the default dependency action"
+                        return $defaultDependencyAction
+                    }
+                
+                    if ($dependencyAction.ToLower().Trim() -eq "stop" -or $dependencyAction.ToLower().Trim() -eq "continue" -or $dependencyAction.ToLower().Trim() -eq "deploynewermatching" -or $dependencyAction.ToLower().Trim() -eq "deploynomatchingintarget")
+                    {
+                        Write-Verbose "The dependency action passed in was $dependencyAction, returning that as the dependency action to use for this dependency check"
+                        return $dependencyAction
+                    }
+                
+                    return $defaultDependencyAction
+                }
+                
                 $dependencyList = ConvertFrom-Json $parameterDependencies
                 
                 $defaultSpace = Get-OctopusItemByName -itemName $parameterSpaceName -itemType "Space" -endpoint "spaces" -defaultValue $null -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
@@ -879,7 +914,8 @@ step "check-dependencies" {
                 foreach ($dependency in $dependencyList)
                 {
                     $space = Get-OctopusItemByName -itemName $dependency.SpaceName -itemType "Space" -endpoint "spaces" -defaultValue $defaultSpace -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                    $environment = Get-OctopusItemByName -itemName $dependency.SpaceName -itemType "Environment" -endpoint "environments" -defaultValue $defaultEnvironment -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    # If enough people want to be able to override the environment, we can quickly add the logic here
+                    $environment = $defaultEnvironment
                     $project = Get-OctopusItemByName -itemName $dependency.ProjectName -itemType "Project" -endpoint "projects" -defaultValue $null -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $tenant = Get-OctopusItemByName -itemName $dependency.TenantName -itemType "Tenant" -endpoint "tenants" -defaultValue $defaultTenant -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 
@@ -890,8 +926,9 @@ step "check-dependencies" {
                     $sourceEnvironments = Get-SourceEnvironmentsFromPhase -matchingChannels $matchingChannels -environment $environment
                     $sourceDeploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $dependencyAction = Get-DependencyAction -dependencyAction $dependency.DependencyAction -defaultDependencyAction $parameterDefaultDependencyAction
                 
-                    $dependencyCompareResult = Get-VersionCompareResult -deployedVersion $deployedVersion.Version -sourceVersionToDeploy $sourceVersionToDeploy.Version -dependency $dependency -environment $environment -dependencyAction $parameterOlderDependencyAction -approvalRequested $parameterApprovalRequested
+                    $dependencyCompareResult = Get-VersionCompareResult -deployedVersion $deployedVersion.Version -sourceVersionToDeploy $sourceVersionToDeploy.Version -dependency $dependency -environment $environment -dependencyAction $dependencyAction -approvalRequested $parameterApprovalRequested
                 
                     Write-Highlight "$($dependencyCompareResult.Reason)"
                     
@@ -931,6 +968,8 @@ step "check-dependencies" {
                         "DeploymentIsNeeded" = $dependencyCompareResult.DeploymentIsNeeded
                         "TargetEnvironmentName" = $environment.Name
                         "TargetEnvironmentId" = $environment.Id
+                        "TenantId" = $null
+                        "TenantName" = $null
                     }
                 
                     if ($null -ne $tenant)
@@ -1296,17 +1335,28 @@ step "deploy-dependencies" {
                 
                     $taskStatusResponseState = $taskStatusResponse.State
                 
-                    if ($null -ne $taskStatusResponse.StartTime)
+                    if($taskStatusResponseState -eq "Failed" -or $taskStatusResponseState -eq "Canceled")
                     {
+                        return $taskStatusResponseState
+                    }
+                
+                    if ($null -ne $taskStatusResponse.StartTime)
+                    {        
                         $deploymentStartTime = [DateTime]::Parse($taskStatusResponse.StartTime)
-                        $currentTime = Get-UtcDate
+                        Write-Host "The deployment task $deploymentTaskId started at $deploymentStartTime and is currently in state $taskStatusResponseState"
+                        
+                        $currentTime = Get-Date
+                        Write-host "The current time is $currentTime"
+                
                         $timeDifference = $currentTime - $deploymentStartTime
                         $timeDifferenceInMinutes = $timeDifference.TotalMinutes
+                        Write-Host "The deployment task $deploymentTaskId has been running for $timeDifferenceInMinutes minutes"
                 
                         if ($timeDifferenceInMinutes -gt $timeoutInMinutes)
                         {
                             Write-Highlight "❌ Deployment task $deploymentTaskId has exceeded the timeout of $timeoutInMinutes minutes.  Stopping further deployments."
                             Write-Error "Stopping deployment because it exceeded the timeout allowed."
+                            Invoke-OctopusApi -octopusUrl $defaultUrl -apiKey $octopusApiKey -spaceId $spaceId -method "POST" -endPoint "tasks/$($deploymentTaskId)/cancel"    
                             Exit 1
                         }
                     }
@@ -1394,7 +1444,7 @@ step "deploy-dependencies" {
                         $dependency
                     )
                     
-                    return @{
+                    $deploymentRequest = @{
                         EnvironmentId = $dependency.TargetEnvironmentId;
                         ExcludeMachineIds = @();
                         ForcePackageDownload = $false;
@@ -1409,6 +1459,12 @@ step "deploy-dependencies" {
                         UseGuidedFailure = $false
                     }
                 
+                    if ($null -ne $dependency.TenantId)
+                    {
+                      $deploymentRequest.TenantId = $dependency.TenantId
+                    }
+                
+                    return $deploymentRequest
                 }
                     
                 
@@ -1418,7 +1474,7 @@ step "deploy-dependencies" {
                 
                 foreach ($deployGroup in $deployGroupInfo.DeployGroupOrdered)
                 {
-                    Write-Host "Checking all the dependencies in deploy group $deployGroup have been deployed.  Any dependencies that haven't been deployed will be started.."    
+                    Write-Host "Checking all the dependencies in deploy group $deployGroup have been deployed.  Any dependencies that haven't been deployed will be started..."    
                 
                     $dependenciesInGroup = $deployGroupInfo.DeployGroupDependencyList[$deployGroup].DependencyList    
                     $allDeploymentsCompleted = $false

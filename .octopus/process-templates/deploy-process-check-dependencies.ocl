@@ -301,13 +301,16 @@ step "check-dependencies" {
                             Write-Verbose "No data to post or put, calling bog standard invoke-restmethod for $url"
                             $result = Invoke-RestMethod -Method $method -Uri $url -Headers @{"X-Octopus-ApiKey" = "$ApiKey" } -ContentType 'application/json; charset=utf-8' -TimeoutSec 60
                 
-                            if ($cachedResults.ContainsKey($url) -eq $true)
+                            if ($localSkipCache -eq $false)
                             {
-                                $cachedResults.Remove($url)
+                                if ($cachedResults.ContainsKey($url) -eq $true)
+                                {
+                                    $cachedResults.Remove($url)
+                                }
+                                Write-Verbose "Adding $url to the cache"
+                                $cachedResults.add($url, $result)
                             }
-                            Write-Verbose "Adding $url to the cache"
-                            $cachedResults.add($url, $result)
-                
+                            
                             return $result
                         }
                 
@@ -986,7 +989,7 @@ step "check-dependencies" {
                 }
                 
                 function Get-SNoWChangeRequestNumber {
-                    parameter(
+                    param(
                         $changeRequestNumber,
                         $environment,
                         $project,
@@ -1047,7 +1050,7 @@ step "check-dependencies" {
                 }
                 
                 function Get-JSMChangeRequestNumber {
-                    parameter(
+                    param(
                         $changeRequestNumber,
                         $environment,
                         $project,

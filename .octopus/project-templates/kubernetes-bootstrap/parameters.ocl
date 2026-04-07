@@ -14,6 +14,24 @@ parameter "Template.K8s.WorkerPool" {
     label = "Kubernetes Worker Pool"
 }
 
+parameter "Template.Registry.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The container for Registry coming from DockerHub"
+    label = "Registry Docker Container"
+}
+
+parameter "Template.Registry.Port" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The port to connect to the Registry - Defaults to `32000`"
+    label = "Registry Port"
+
+    value "32000" {}
+}
+
 parameter "Template.Traefik.Package" {
     display_settings = {
         Octopus.ControlType = "Package"
@@ -58,10 +76,22 @@ parameter "Template.MailPit.Package" {
     label = "Mailpit Docker Container"
 }
 
-parameter "Template.Registry.Package" {
+parameter "Template.MailPit.SmtpPort" {
     display_settings = {
-        Octopus.ControlType = "Package"
+        Octopus.ControlType = "SingleLineText"
     }
-    help_text = "The container for Registry coming from DockerHub"
-    label = "Registry Docker Container"
+    help_text = "The MailPit port for SMTP traffic - defaults to `31025`"
+    label = "MailPit SMTP Port"
+
+    value "31025" {}
+}
+
+parameter "Template.MailPit.GuiPort" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The GUI port for MailPit - Defaults to `32025`"
+    label = "MailPit GUI Port"
+
+    value "32025" {}
 }

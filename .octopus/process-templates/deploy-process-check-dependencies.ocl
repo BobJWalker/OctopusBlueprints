@@ -430,7 +430,52 @@ step "check-dependencies" {
                     return $item
                 }
                 
-                function Get-DeploymentTasks
+                function Wait-ForExecutingTasksToComplete {
+                    param (
+                        $spaceId,
+                        $project,
+                        $tenant,        
+                        $sourceEnvironmentList,
+                        $targetEnvironment,
+                        $octopusUrl,
+                        $octopusApiKey
+                    )   
+                
+                    $taskEndPoint = "tasks?skip=0&take=100&spaces=$spaceId&includeSystem=false&project=$($project.Id)&name=Deploy&states=Executing"
+                    if ($null -ne $tenant)
+                    {
+                        $taskEndPoint += "&tenant=$($tenant.Id)"
+                    }
+                    
+                    $environmentList = $sourceEnvironmentList + @($targetEnvironment.Id)
+                    $tasksExecuting = $false
+                
+                    do 
+                    {
+                        $tasksExecuting = $false
+                        foreach ($environmentId in $environmentList) 
+                        {
+                            $taskList = Get-ListFromOctopusApi -octopusUrl $octopusUrl -endPoint "$($taskEndPoint)&environment=$environmentId" -spaceId $null -apiKey $octopusApiKey -method "GET" -propertyName "Items"        
+                
+                            if ($taskList.Count -gt 0)
+                            {
+                                Write-Host "⏳ Deployment for project $($project.ProjectName) to environment $($environmentId) is still in progress.  Will check again later..."
+                                $tasksExecuting = $true
+                            }
+                        }
+                
+                        if ($tasksExecuting -eq $true)
+                        {
+                            Write-Host "⏳ At least one deployment is still executing in the source and destination environments.  Waiting for 5 seconds before checking again..."
+                            Start-Sleep -Seconds 5
+                        }
+                
+                    } while ($tasksExecuting -eq $true)
+                
+                    Write-Host "✅ All deployments for project $($project.ProjectName) the target and source environments are no longer executing, proceeding with the deployment checks."
+                }
+                
+                function Get-SuccessfulDeploymentTasks
                 {
                     param (
                         $spaceId,
@@ -439,7 +484,7 @@ step "check-dependencies" {
                         $environmentList,
                         $octopusUrl,
                         $octopusApiKey
-                    )
+                    )    
                 
                     $taskEndPoint = "tasks?skip=0&take=100&spaces=$spaceId&includeSystem=false&project=$($project.Id)&name=Deploy&states=Success"
                 
@@ -1064,24 +1109,35 @@ step "check-dependencies" {
                 $requireManualIntervention = $false
                 foreach ($dependency in $dependencyList)
                 {
-                    $space = Get-OctopusItemByName -itemName $dependency.SpaceName -itemType "Space" -endpoint "spaces" -defaultValue $defaultSpace -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                    # If enough people want to be able to override the environment, we can quickly add the logic here
-                    $environment = $defaultEnvironment
+                    # Gather basic information about the dependency such as the space, environment, project, and tenant it is referring to.  We will use this information to pull deployment information to compare against the dependency requirements.
+                    $space = Get-OctopusItemByName -itemName $dependency.SpaceName -itemType "Space" -endpoint "spaces" -defaultValue $defaultSpace -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey    
                     $project = Get-OctopusItemByName -itemName $dependency.ProjectName -itemType "Project" -endpoint "projects" -defaultValue $null -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $tenant = Get-OctopusItemByName -itemName $dependency.TenantName -itemType "Tenant" -endpoint "tenants" -defaultValue $defaultTenant -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                
-                    $deploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList @($environment.Id) -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                    $deployedVersion = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $deploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey  
-                    
-                    $matchingChannels = Get-ProjectChannelsWithDestinationEnvironment -project $project -environment $environment -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                    $sourceEnvironments = Get-SourceEnvironmentsFromPhase -matchingChannels $matchingChannels -environment $environment
-                    $sourceDeploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                    $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $dependencyAction = Get-DependencyAction -dependencyAction $dependency.DependencyAction -defaultDependencyAction $parameterOlderDependencyAction
                 
+                    # If enough people want to be able to override the environment, we can quickly add the logic here
+                    $environment = $defaultEnvironment
+                
+                    # Get Information about the source environments and channels first
+                    $matchingChannels = Get-ProjectChannelsWithDestinationEnvironment -project $project -environment $environment -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $sourceEnvironments = Get-SourceEnvironmentsFromPhase -matchingChannels $matchingChannels -environment $environment
+                
+                    # Wait for active deployments to finish before pulling deployment information to ensure we have the most up to date information
+                    Wait-ForExecutingTasksToComplete -spaceId $space.Id -projectId $project.Id -tenantId $tenant.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -sourceEnvironmentList $sourceEnvironments -targetEnvironment $environment
+                
+                    # Pull in all the successful deployments for the target environment
+                    $deploymentTasks = Get-SuccessfulDeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList @($environment.Id) -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $deployedVersion = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $deploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey  
+                        
+                    # Pull in all the successful deployments for the source environments to find a version to deploy if needed
+                    $sourceDeploymentTasks = Get-SuccessfulDeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                
+                    # Pull the change request number to send to the dependencies
                     $snowChangeRequestNumber = Get-SNoWChangeRequestNumber -changeRequestNumber $octopusVariableServiceNowChangeRequestNumber -environment $environment -project $project -reuseChangeRequest $parameterReuseChangeRequest
                     $jsmChangeRequestNumber = Get-JSMChangeRequestNumber -changeRequestNumber $octopusVariableJSMChangeRequestNumber -environment $environment -project $project -reuseChangeRequest $parameterReuseChangeRequest
                 
+                    # Get the action that we want to perform based on the version comparison and the dependency action specified
                     $dependencyCompareResult = Get-VersionCompareResult -deployedVersion $deployedVersion.Version -sourceVersionToDeploy $sourceVersionToDeploy.Version -dependency $dependency -environment $environment -dependencyAction $dependencyAction -approvalRequested $parameterApprovalRequested
                 
                     Write-Highlight "$($dependencyCompareResult.Reason)"

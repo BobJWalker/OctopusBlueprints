@@ -264,16 +264,27 @@ step "check-dependencies" {
                         $apiKey,
                         $method,
                         $item,        
-                        $retryCount
+                        $retryCount,
+                        $skipCache
                     )
                 
                     try
-                    {        
+                    {    
+                        $localSkipCache = $false
+                        if ($null -eq $skipCache)    
+                        {
+                            $localSkipCache = $false
+                        }
+                        else
+                        {
+                            $localSkipCache = $skipCache
+                        }
+                
                         $url = Get-OctopusUrl -EndPoint $endPoint -SpaceId $spaceId -OctopusUrl $octopusUrl
                 
                         if ($null -eq $item)
                         {
-                             if ($method.ToUpper().Trim() -eq "GET")
+                             if ($method.ToUpper().Trim() -eq "GET" -and $localSkipCache -ne $true)
                              {
                                 Write-Verbose "Checking to see if $url is already in the cache"
                                 if ($cachedResults.ContainsKey($url) -eq $true)
@@ -364,7 +375,7 @@ step "check-dependencies" {
                         $propertyName
                     )
                 
-                    $rawItemList = Invoke-OctopusApi -octopusUrl $octopusUrl -endPoint $endPoint -spaceId $spaceId -apiKey $octopusApiKey -method "GET"
+                    $rawItemList = Invoke-OctopusApi -octopusUrl $octopusUrl -endPoint $endPoint -spaceId $spaceId -apiKey $octopusApiKey -method "GET" -skipCache $true
                 
                     $returnList = @($rawItemList.$propertyName)
                 
@@ -459,7 +470,7 @@ step "check-dependencies" {
                 
                             if ($taskList.Count -gt 0)
                             {
-                                Write-Host "⏳ Deployment for project $($project.ProjectName) to environment $($environmentId) is still in progress.  Will check again later..."
+                                Write-Host "⏳ Deployment for project $($project.Name) to environment $($environmentId) is still in progress.  Will check again later..."
                                 $tasksExecuting = $true
                             }
                         }
@@ -472,7 +483,7 @@ step "check-dependencies" {
                 
                     } while ($tasksExecuting -eq $true)
                 
-                    Write-Host "✅ All deployments for project $($project.ProjectName) the target and source environments are no longer executing, proceeding with the deployment checks."
+                    Write-Host "✅ All deployments for project $($project.Name) the target and source environments are no longer executing, proceeding with the deployment checks."
                 }
                 
                 function Get-SuccessfulDeploymentTasks

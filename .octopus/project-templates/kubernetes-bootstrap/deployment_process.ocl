@@ -120,7 +120,7 @@ step "deploy-registry" {
                   ports:
                     - port: 5000
                       targetPort: 5000
-                      nodePort: 32000
+                      nodePort: #{Template.Registry.Port}
                 EOT
             Octopus.Action.KubernetesContainers.Namespace = "local-registry"
             Octopus.Action.Script.ScriptSource = "Inline"
@@ -129,6 +129,7 @@ step "deploy-registry" {
 
         packages "Template.Registry.Package" {
             acquisition_location = "NotAcquired"
+            feed = "octopus-server-built-in"
             package_id = ""
             properties = {
                 Extract = "false"
@@ -188,13 +189,13 @@ step "deploy-mailpit" {
                   namespace: mailpit
                 spec:
                   ports:
-                  - nodePort: 31025
-                    port: 31025
+                  - nodePort: #{Template.MailPit.SmtpPort}
+                    port: #{Template.MailPit.SmtpPort}
                     protocol: TCP
                     targetPort: 1025
                     name: smtp
-                  - nodePort: 32025
-                    port: 32025
+                  - nodePort: #{Template.MailPit.GuiPort}
+                    port: #{Template.MailPit.GuiPort}
                     protocol: TCP
                     targetPort: 8025
                     name: gui

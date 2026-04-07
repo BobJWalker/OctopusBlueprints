@@ -1121,6 +1121,28 @@ step "check-dependencies" {
                     return $changeRequestNumber
                 }
                 
+                function Get-GuidedFailureMode
+                {
+                    param (
+                        $environment,
+                        $project
+                    )
+                
+                    if ($project.DefaultGuidedFailureMode -eq "DefaultGuidedFailureMode")
+                    {
+                        Write-Verbose "The project $($project.Name) is configured to use the environmental default, returning that as the guided failure mode"
+                        return $environment.UseGuidedFailure
+                    }
+                
+                    if ($project.DefaultGuidedFailureMode -eq "On")
+                    {
+                        Write-Verbose "The project $($project.Name) is configured to use guided failure, returning that as the guided failure mode"
+                        return $true
+                    } 
+                
+                    return $false
+                }
+                
                 $dependencyList = ConvertFrom-Json $parameterDependencies
                 
                 $defaultSpace = Get-OctopusItemByName -itemName $parameterSpaceName -itemType "Space" -endpoint "spaces" -defaultValue $null -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
@@ -1138,10 +1160,11 @@ step "check-dependencies" {
                     $space = Get-OctopusItemByName -itemName $dependency.SpaceName -itemType "Space" -endpoint "spaces" -defaultValue $defaultSpace -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey    
                     $project = Get-OctopusItemByName -itemName $dependency.ProjectName -itemType "Project" -endpoint "projects" -defaultValue $null -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $tenant = Get-OctopusItemByName -itemName $dependency.TenantName -itemType "Tenant" -endpoint "tenants" -defaultValue $defaultTenant -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                    $dependencyAction = Get-DependencyAction -dependencyAction $dependency.DependencyAction -defaultDependencyAction $parameterOlderDependencyAction
+                    $dependencyAction = Get-DependencyAction -dependencyAction $dependency.DependencyAction -defaultDependencyAction $parameterOlderDependencyAction    
                 
                     # If enough people want to be able to override the environment, we can quickly add the logic here
                     $environment = $defaultEnvironment
+                    $guidedFailureMode = Get-GuidedFailureMode -environment $environment -project $project
                 
                     # Get Information about the source environments and channels first
                     $matchingChannels = Get-ProjectChannelsWithDestinationEnvironment -project $project -environment $environment -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
@@ -1205,6 +1228,13 @@ step "check-dependencies" {
                         "TargetEnvironmentId" = $environment.Id
                         "SnowChangeRequestNumber" = $snowChangeRequestNumber
                         "JSMChangeRequestNumber" = $jsmChangeRequestNumber
+                        "GuidedFailures" = $guidedFailureMode
+                        "PromptedVariables" = @()
+                    }
+                
+                    if ($null -ne $dependency.PromptedVariables)
+                    {
+                        $dependencyResult.PromptedVariables = $dependency.PromptedVariables
                     }
                 
                     if ($null -ne $tenant)
@@ -1677,6 +1707,8 @@ step "deploy-dependencies" {
                         "TenantName" = $dependency.TenantName
                         "SnowChangeRequestNumber" = $dependency.SnowChangeRequestNumber
                         "JSMChangeRequestNumber" = $dependency.JSMChangeRequestNumber
+                        "PromptedVariables" = $dependency.PromptedVariables
+                        "GuidedFailures" = $dependency.GuidedFailures
                 
                         "DeploymentTaskId" = $null        
                     }
@@ -1706,7 +1738,7 @@ step "deploy-dependencies" {
                         SkipActions = @();
                         SpecificMachineIds = @();
                         TenantId = $null;
-                        UseGuidedFailure = $false
+                        UseGuidedFailure = $dependency.GuidedFailures
                     }
                     
                     if ($null -ne $dependency.TenantId)

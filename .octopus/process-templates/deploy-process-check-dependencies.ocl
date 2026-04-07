@@ -1436,6 +1436,8 @@ step "deploy-dependencies" {
                         "DeployedVersion" = $dependency.DeployedVersion                
                         "VersionToDeploy" = $dependency.VersionToDeploy
                         "VersionPattern" = $dependency.VersionPattern
+                        "TenantId" = $dependency.TenantId
+                        "TenantName" = $dependency.TenantName
                 
                         "DeploymentTaskId" = $null        
                     }

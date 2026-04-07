@@ -1700,19 +1700,23 @@ step "deploy-dependencies" {
                     if ($null -ne $dependency.SnowChangeRequestNumber)
                     {
                         Write-Host "The dependency has a ServiceNow change request number of $($dependency.SnowChangeRequestNumber), adding that to the deployment request body under the ChangeRequestSettings property"
-                        $deploymentRequest.ChangeRequestSettings = @{
-                            "ChangeRequestNumber" = $dependency.SnowChangeRequestNumber
-                            "Type" = "ServiceNow"
-                        }
+                        $deploymentRequest.ChangeRequestSettings = @(
+                            @{
+                                "ChangeRequestNumber" = $dependency.SnowChangeRequestNumber
+                                "Type" = "ServiceNow"
+                            }
+                        )
                     }
                 
                     if ($null -ne $dependency.JSMChangeRequestNumber)
                     {
                         Write-Host "The dependency has a JIRA Service Management change request number of $($dependency.JSMChangeRequestNumber), adding that to the deployment request body under the ChangeRequestSettings property"
-                        $deploymentRequest.ChangeRequestSettings = @{
-                            "ChangeRequestNumber" = $dependency.JSMChangeRequestNumber
-                            "Type" = "JiraServiceManagement"
-                        }
+                        $deploymentRequest.ChangeRequestSettings = @(
+                            @{
+                                "ChangeRequestNumber" = $dependency.JSMChangeRequestNumber
+                                "Type" = "JiraServiceManagement"
+                            }
+                        )
                     }
                 
                     return $deploymentRequest

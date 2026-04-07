@@ -163,6 +163,24 @@ parameter "Template.Tenant.Name" {
     value "#{Octopus.Deployment.Tenant.Name}" {}
 }
 
+parameter "Template.ChangeRequest.ReuseChangeRequest" {
+    display_settings = {
+        Octopus.ControlType = "Select"
+        Octopus.SelectOptions = <<-EOT
+            Yes|Yes
+            No|No
+            EOT
+    }
+    help_text = <<-EOT
+            When set to `Yes` it will send down the change request number to the dependent projects from this project.
+            
+            **Important** - the dependent project has to be configured for ITSM approvals.
+            EOT
+    label = "Reuse Change Request on Dependencies"
+
+    value "No" {}
+}
+
 step "check-dependencies" {
     name = "Check Dependencies"
 
@@ -180,6 +198,7 @@ step "check-dependencies" {
                 $parameterOctopusInstance = $OctopusParameters["Octopus.Web.ServerUri"]
                 $parameterDependencies = $OctopusParameters["Template.Dependency.Projects"]
                 $parameterOlderDependencyAction = $OctopusParameters["Template.Dependency.Action"]
+                $parameterReuseChangeRequest = $OctopusParameters["Template.ChangeRequest.ReuseChangeRequest"]
                 
                 $parameterTargetEnvironmentName = $OctopusParameters["Template.Environment.Name"] # Target environment for deployment
                 $parameterTargetTenantName = $OctopusParameters["Template.Tenant.Name"] # Target Tenant for deployment (when doing multi-tenancy)
@@ -187,13 +206,19 @@ step "check-dependencies" {
                 $stepName = $OctopusParameters["Octopus.Action.StepName"]
                 $parameterApprovalRequested = $OctopusParameters["Template.Dependency.Approval"] # Indicates if approval was requested
                 
+                $octopusVariableServiceNowChangeRequestNumber = $OctopusParameters["Octopus.ServiceNow.ChangeRequest.Number"] # Indicates a ServiceNow change request was either created or supplied to this deployment
+                $octopusVariableJSMChangeRequestNumber = $OctopusParameters["Octopus.JiraServiceManagement.ChangeRequest.Number"] # Indicates a JIRA Service Management change request was either created or supplied to this deployment
+                
                 Write-Host "Octopus Instance: $parameterOctopusInstance"
                 Write-Host "Dependencies: $parameterDependencies"
                 Write-Host "Dependency Action: $parameterOlderDependencyAction"
+                Write-Host "Reuse Change Request: $parameterReuseChangeRequest"
                 Write-Host "Approval Requested: $parameterApprovalRequested"
                 Write-Host "Target Environment Name: $parameterTargetEnvironmentName"
                 Write-Host "Target Tenant Name: $parameterTargetTenantName"
                 Write-Host "Target Space Name: $parameterSpaceName"
+                Write-Host "ServiceNow Change Request Number: $octopusVariableServiceNowChangeRequestNumber"
+                Write-Host "JIRA Service Management Change Request Number: $octopusVariableJSMChangeRequestNumber"
                 
                 $cachedResults = @{}
                 
@@ -904,6 +929,128 @@ step "check-dependencies" {
                     return $defaultDependencyAction
                 }
                 
+                function Get-SNoWChangeRequestNumber {
+                    parameter(
+                        $changeRequestNumber,
+                        $environment,
+                        $project,
+                        $reuseChangeRequest
+                    )
+                
+                    if ([string]::IsNullOrWhiteSpace($reuseChangeRequest) -or $reuseChangeRequest -eq "No")
+                    {
+                        Write-Verbose "The reuse change request variable is set to No, returning null for the change request id to ensure a new change request is created for this deployment"
+                        return $null
+                    }
+                
+                    if ([string]::IsNullOrWhiteSpace($changeRequestNumber))
+                    {
+                        Write-Verbose "The change request number passed in was empty or whitespace, returning null for the change request id"
+                        return $null
+                    }
+                
+                    if ($changeRequestNumber -like "#{Octopus*")
+                    {
+                        Write-Verbose "The change request number passed in was $changeRequestNumber, which is a variable reference, returning null for the change request id"
+                        return $null
+                    }
+                
+                    $environmentHasSNoWIntegration = $false
+                    foreach ($extension in $environment.ExtensionSettings)
+                    {
+                        if ($extension.ExtensionId -eq "servicenow-integration")
+                        {
+                            $environmentHasSNoWIntegration = $extension.Values.ServiceNowChangeControlled
+                            break
+                        }
+                    }
+                
+                    if ($environmentHasSNoWIntegration -eq $false)
+                    {
+                        Write-Verbose "The environment $($environment.Name) does not have the ServiceNow integration, returning null for the change request id"
+                        return $null
+                    }
+                
+                    $projectHasSNoWIntegration = $false
+                    foreach ($extension in $project.ExtensionSettings)
+                    {
+                        if ($extension.ExtensionId -eq "servicenow-integration")
+                        {
+                            $projectHasSNoWIntegration = $extension.Values.ServiceNowChangeControlled
+                            break
+                        }
+                    }
+                
+                    if ($projectHasSNoWIntegration -eq $false)
+                    {
+                        Write-Verbose "The project $($project.Name) does not have the ServiceNow integration, returning null for the change request id"
+                        return $null
+                    }
+                
+                    return $changeRequestNumber
+                }
+                
+                function Get-JSMChangeRequestNumber {
+                    parameter(
+                        $changeRequestNumber,
+                        $environment,
+                        $project,
+                        $reuseChangeRequest
+                    )
+                
+                    if ([string]::IsNullOrWhiteSpace($reuseChangeRequest) -or $reuseChangeRequest -eq "No")
+                    {
+                        Write-Verbose "The reuse change request variable is set to No, returning null for the change request id to ensure a new change request is created for this deployment"
+                        return $null
+                    }
+                
+                    if ([string]::IsNullOrWhiteSpace($changeRequestNumber))
+                    {
+                        Write-Verbose "The change request number passed in was empty or whitespace, returning null for the change request id"
+                        return $null
+                    }
+                
+                    if ($changeRequestNumber -like "#{Octopus*")
+                    {
+                        Write-Verbose "The change request number passed in was $changeRequestNumber, which is a variable reference, returning null for the change request id"
+                        return $null
+                    }
+                
+                    $environmentHasSNoWIntegration = $false
+                    foreach ($extension in $environment.ExtensionSettings)
+                    {
+                        if ($extension.ExtensionId -eq "jiraservicemanagement-integration")
+                        {
+                            $environmentHasSNoWIntegration = $extension.Values.JsmChangeControlled
+                            break
+                        }
+                    }
+                
+                    if ($environmentHasSNoWIntegration -eq $false)
+                    {
+                        Write-Verbose "The environment $($environment.Name) does not have the JSM integration, returning null for the change request id"
+                        return $null
+                    }
+                
+                    $projectHasSNoWIntegration = $false
+                    foreach ($extension in $project.ExtensionSettings)
+                    {
+                        if ($extension.ExtensionId -eq "jiraservicemanagement-integration")
+                        {
+                            $projectHasSNoWIntegration = $extension.Values.JsmChangeControlled
+                            break
+                        }
+                    }
+                
+                    if ($projectHasSNoWIntegration -eq $false)
+                    {
+                        Write-Verbose "The project $($project.Name) does not have the JSM integration, returning null for the change request id"
+                        return $null
+                    }
+                
+                    return $changeRequestNumber
+                }
+                
                 $dependencyList = ConvertFrom-Json $parameterDependencies
                 
                 $defaultSpace = Get-OctopusItemByName -itemName $parameterSpaceName -itemType "Space" -endpoint "spaces" -defaultValue $null -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
@@ -931,6 +1078,9 @@ step "check-dependencies" {
                     $sourceDeploymentTasks = Get-DeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $dependencyAction = Get-DependencyAction -dependencyAction $dependency.DependencyAction -defaultDependencyAction $parameterOlderDependencyAction
+                
+                    $snowChangeRequestNumber = Get-SNoWChangeRequestNumber -changeRequestNumber $octopusVariableServiceNowChangeRequestNumber -environment $environment -project $project -reuseChangeRequest $parameterReuseChangeRequest
+                    $jsmChangeRequestNumber = Get-JSMChangeRequestNumber -changeRequestNumber $octopusVariableJSMChangeRequestNumber -environment $environment -project $project -reuseChangeRequest $parameterReuseChangeRequest
                 
                     $dependencyCompareResult = Get-VersionCompareResult -deployedVersion $deployedVersion.Version -sourceVersionToDeploy $sourceVersionToDeploy.Version -dependency $dependency -environment $environment -dependencyAction $dependencyAction -approvalRequested $parameterApprovalRequested
                 
@@ -972,6 +1122,8 @@ step "check-dependencies" {
                         "DeploymentIsNeeded" = $dependencyCompareResult.DeploymentIsNeeded
                         "TargetEnvironmentName" = $environment.Name
                         "TargetEnvironmentId" = $environment.Id
+                        "SnowChangeRequestNumber" = $snowChangeRequestNumber
+                        "JSMChangeRequestNumber" = $jsmChangeRequestNumber
                     }
                 
                     if ($null -ne $tenant)
@@ -1077,7 +1229,7 @@ step "deploy-dependencies" {
                 $parameterOctopusInstance = $OctopusParameters["Octopus.Web.ServerUri"] # Octopus Deploy instance URL
                 $parameterMinAvailableTaskCapacity = 3 # Minimum available task capacity required before starting a new deployment
                 $parameterDeploymentTimeoutMinutes = 30 # Timeout for each deployment in minutes
-                $parameterDependencyResults = $OctopusParameters["Octopus.ProcessTemplate.Action[Check Dependencies].Output.DependencyResult"]
+                $parameterDependencyResults = $OctopusParameters["Octopus.ProcessTemplate.Action[Check Dependencies].Output.DependencyResult"] 
                 
                 Write-Host "The dependency results to deploy are $parameterDependencyResults"
                 
@@ -1438,6 +1590,8 @@ step "deploy-dependencies" {
                         "VersionPattern" = $dependency.VersionPattern
                         "TenantId" = $dependency.TenantId
                         "TenantName" = $dependency.TenantName
+                        "SnowChangeRequestNumber" = $dependency.SnowChangeRequestNumber
+                        "JSMChangeRequestNumber" = $dependency.JSMChangeRequestNumber
                 
                         "DeploymentTaskId" = $null        
                     }
@@ -1471,6 +1625,24 @@ step "deploy-dependencies" {
                     {
                         Write-Host "The dependency has a tenant id of $($dependency.TenantId), adding that to the deployment request body"
                         $deploymentRequest.TenantId = $dependency.TenantId
+                    }
+                
+                    if ($null -ne $dependency.SnowChangeRequestNumber)
+                    {
+                        Write-Host "The dependency has a ServiceNow change request number of $($dependency.SnowChangeRequestNumber), adding that to the deployment request body under the ChangeRequestSettings property"
+                        $deploymentRequest.ChangeRequestSettings = @{
+                            "ChangeRequestNumber" = $dependency.SnowChangeRequestNumber
+                            "Type" = "ServiceNow"
+                        }
+                    }
+                
+                    if ($null -ne $dependency.JSMChangeRequestNumber)
+                    {
+                        Write-Host "The dependency has a JIRA Service Management change request number of $($dependency.JSMChangeRequestNumber), adding that to the deployment request body under the ChangeRequestSettings property"
+                        $deploymentRequest.ChangeRequestSettings = @{
+                            "ChangeRequestNumber" = $dependency.JSMChangeRequestNumber
+                            "Type" = "JiraServiceManagement"
+                        }
                     }
                 
                     return $deploymentRequest

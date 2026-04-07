@@ -1123,7 +1123,7 @@ step "check-dependencies" {
                     $sourceEnvironments = Get-SourceEnvironmentsFromPhase -matchingChannels $matchingChannels -environment $environment
                 
                     # Wait for active deployments to finish before pulling deployment information to ensure we have the most up to date information
-                    Wait-ForExecutingTasksToComplete -spaceId $space.Id -projectId $project.Id -tenantId $tenant.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -sourceEnvironmentList $sourceEnvironments -targetEnvironment $environment
+                    Wait-ForExecutingTasksToComplete -spaceId $space.Id -project $project -tenant $tenant -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -sourceEnvironmentList $sourceEnvironments -targetEnvironment $environment
                 
                     # Pull in all the successful deployments for the target environment
                     $deploymentTasks = Get-SuccessfulDeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList @($environment.Id) -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey

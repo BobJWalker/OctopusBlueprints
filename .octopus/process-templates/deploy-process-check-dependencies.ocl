@@ -41,19 +41,29 @@ parameter "Template.Dependency.Projects" {
                 "versionPattern": ">1.0.42", 
                 "deployGroup": 1,    
                 "spaceName": "Default",
-                "tenantName": null 
               },
               {
                 "versionPattern": "~2.4.0",
                 "spaceName": "Default",
                 "projectName": "TAKA",
-                "deployGroup": 1
+                "deployGroup": 1,
+                "promptedVariables": [
+                     {
+                           "name": "My Awesome Variable"
+                           "value": "Some Value"
+                     },
+                     {
+                           "name": "Other Variable"
+                           "value": "Another Value"
+                     }
+                 ]
               },
               {
                 "versionPattern": "^4.0.0",
                 "spaceName": "Default",
-                "projectName": "TAWA",
-                "deployGroup": 2
+                "projectName": "StoreHub",
+                "deployGroup": 2,
+                "tenantName": "Internal",
                 "dependencyAction": "Continue"
               }
             ]
@@ -66,6 +76,7 @@ parameter "Template.Dependency.Projects" {
             - deployGroup - **Optional** Projects in the same deploy group will be deployed concurrently.  Items in different deploy groups will be deployed sequentially.  If omitted all dependencies are deployed sequentially.  
             - spaceName - **Optional** uses the current space if not provided.
             - tenantName - **Optional** the name of the tenant to deploy.  If not specified will use the current tenant being deployed (if doing a tenanted deployment)
+            - promptedVariables - **Optional** an array that lets you send in prompted variable values to the dependency project.  This will only work with string variable types, text, and sensitive values.
             - dependencyAction - **Optional** overrides the default dependency action parameter.  For example, if you want to continue for a specific dependency but stop for all other dependencies.  The options are: 
                 - `Stop` which will stop the deployment
                 - `Continue` which will continue the deploy
@@ -1535,9 +1546,13 @@ step "deploy-dependencies" {
                         $dependency
                     )
                 
+                    Write-Host "Pulling in the deployment preview for project $($dependency.ProjectName) to environment $($dependency.TargetEnvironmentName) to check for prompted variables and ensure the deployment can proceed before invoking the deployment..."
+                    $deploymentPreview = Get-DeploymentPreview -octopusUrl $octopusUrl -octopusApiKey $octopusApiKey -dependency $dependency
+                    $promptedVariableValues = Get-ValuesForPromptedVariables -deploymentPreview $deploymentPreview -dependency $dependency
+                
                     Write-Host "Starting deployment for project $($dependency.ProjectName) to environment $($dependency.TargetEnvironmentName)..."
                 
-                    $deploymentRequest = New-OctopusDeploymentRequest -dependency $dependency
+                    $deploymentRequest = New-OctopusDeploymentRequest -dependency $dependency -promptedVariables $promptedVariableValues
                 
                     Write-Host "Deploying $($dependency.VersionToDeploy) for $($dependency.ProjectName) to $($dependency.TargetEnvironmentName)"
                     $createdDeploymentResponse = Invoke-OctopusApi -method "POST" -endPoint "deployments" -octopusUrl $octopusUrl -apiKey $octopusApiKey -spaceId $dependency.SpaceId -item $deploymentRequest
@@ -1669,19 +1684,22 @@ step "deploy-dependencies" {
                 
                 function New-OctopusDeploymentRequest {
                     param(
-                        $dependency
+                        $dependency,
+                        $promptedVariables
                     )
                 
                     Write-Host "Converting the dependency for project $($dependency.ProjectName) to environment $($dependency.TargetEnvironmentName) into a deployment request body for the Octopus API"    
                     $dependencyAsString = $dependency | ConvertTo-Json
                     Write-Host $dependencyAsString
                 
+                    Write-Host "The prompted variables for this deployment are $($promptedVariables | ConvertTo-Json)"
+                
                     $deploymentRequest = @{
                         EnvironmentId = $dependency.TargetEnvironmentId;
                         ExcludeMachineIds = @();
                         ForcePackageDownload = $false;
                         ForcePackageRedeployment = $false;
-                        FormValues = @{};
+                        FormValues = $promptedVariables;
                         QueueTime = $null;
                         QueueTimeExpiry = $null;
                         ReleaseId = $dependency.ReleaseIdToDeploy;
@@ -1725,46 +1743,48 @@ step "deploy-dependencies" {
                 function Get-DeploymentPreview
                 {
                     param (
-                        $releaseToDeploy,        
-                        $defaultUrl,
-                        $spaceId,
+                        $octopusUrl,
                         $octopusApiKey,
-                        $targetEnvironment,
-                        $deploymentTenant
+                        $dependency
                     )
                 
-                    if ($null -eq $deploymentTenant)
+                    if ($null -eq $dependency.TenantId)
                     {
-                        Write-OctopusInformation "The deployment tenant id was not sent in, generating a preview by hitting releases/$($releaseToDeploy.Id)/deployments/preview/$($targetEnvironment.Id)?includeDisabledSteps=true"    
-                        return Invoke-OctopusApi -octopusUrl $defaultUrl -endPoint "releases/$($releaseToDeploy.Id)/deployments/preview/$($targetEnvironment.Id)?includeDisabledSteps=true" -apiKey $octopusApiKey -method "GET" -spaceId $spaceId
+                        Write-OctopusInformation "The deployment tenant id was not sent in, generating a preview by hitting releases/$($dependency.ReleaseIdToDeploy)/deployments/preview/$($dependency.TargetEnvironmentId)?includeDisabledSteps=true"    
+                        return Invoke-OctopusApi -octopusUrl $defaultUrl -endPoint "releases/$($dependency.ReleaseIdToDeploy)/deployments/preview/$($dependency.TargetEnvironmentId)?includeDisabledSteps=true" -apiKey $octopusApiKey -method "GET" -spaceId $spaceId
                     }
                 
-                    Write-OctopusInformation "The deployment tenant id was sent in, generating a preview by hitting releases/$($releaseToDeploy.Id)/deployments/previews" 
+                    Write-OctopusInformation "The deployment tenant id was sent in, generating a preview by hitting releases/$($dependency.ReleaseIdToDeploy)/deployments/previews" 
                     $requestBody = @{
                     		DeploymentPreviews = @(
                     			@{
-                                	TenantId = $deploymentTenant.Id;
-                            		EnvironmentId = $targetEnvironment.Id
+                                	"TenantId" = $dependency.TenantId
+                            		"EnvironmentId" = $dependency.TargetEnvironmentId
                                  }
                             )
                     }
-                    return Invoke-OctopusApi -octopusUrl $defaultUrl -endPoint "releases/$($releaseToDeploy.Id)/deployments/previews" -apiKey $octopusApiKey -method "POST" -spaceId $spaceId -item $requestBody -itemIsArray $true
+                    return Invoke-OctopusApi -octopusUrl $defaultUrl -endPoint "releases/$($dependency.ReleaseIdToDeploy)/deployments/previews" -apiKey $octopusApiKey -method "POST" -spaceId $spaceId -item $requestBody -itemIsArray $true
                 }
                 
                 function Get-ValuesForPromptedVariables
                 {
                     param (
                         $deploymentPreview,
-                        $formValues
+                        $dependency
                     )
                 
                     $deploymentFormValues = @{}
                     if ([string]::IsNullOrWhiteSpace($formValues) -eq $true)
                     {
                         return $deploymentFormValues
-                    }   
+                    }  
                     
-                    $promptedValueList = @(($formValues -Split "`n").Trim())
+                    if ($null -eq $dependency.promptedVariables -or $dependency.promptedVariables.Count -eq 0)
+                    {
+                        Write-OctopusVerbose "Form values were provided but there are no prompted variables in the deployment preview, returning empty form values"
+                        return $deploymentFormValues
+                    }
+                        
                     Write-OctopusVerbose $promptedValueList.Length
                     
                     foreach($element in $deploymentPreview.Form.Elements)
@@ -1776,19 +1796,15 @@ step "deploy-dependencies" {
                         $promptedVariablefound = $false
                         
                         Write-OctopusVerbose "Looking for the prompted variable value for $nameToSearchFor"
-                        foreach ($promptedValue in $promptedValueList)
-                        {
-                            $splitValue = $promptedValue -Split "::"
-                            Write-OctopusVerbose "Comparing $nameToSearchFor with provided prompted variable $($promptedValue[0])"
-                            if ($splitValue.Length -gt 1)
+                        foreach ($promptedValue in $dependency.promptedVariables)
+                        {            
+                            Write-OctopusVerbose "Comparing $nameToSearchFor with provided prompted variable $($promptedValue.Name)"
+                            if ($nameToSearchFor.ToLower().Trim() -eq $promptedValue.Name.ToLower().Trim())
                             {
-                                if ($nameToSearchFor.ToLower().Trim() -eq $splitValue[0].ToLower().Trim())
-                                {
-                                    Write-OctopusVerbose "Found the prompted variable value $nameToSearchFor"
-                                    $deploymentFormValues[$uniqueName] = $splitValue[1]
-                                    $promptedVariableFound = $true
-                                    break
-                                }
+                                Write-OctopusVerbose "Found the prompted variable value $nameToSearchFor"
+                                $deploymentFormValues[$uniqueName] = $promptedValue.Value
+                                $promptedVariableFound = $true
+                                break
                             }
                         }
                         
@@ -1855,7 +1871,7 @@ step "deploy-dependencies" {
                             Write-Host "There is sufficient capacity to deploy $($dependency.ProjectName) to $($dependency.TargetEnvironmentName).  Starting deployment now..."
                             $dependency.DeploymentTaskId = Invoke-DependencyDeployment -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -dependency $dependency            
                 
-                            Write-Highlight "✅ $($dependency.ProjectName) $($dependency.VersionToDeploy) was successfully invoked, you can access the deployment [here]($octopusUrl/app#/$($dependency.SpaceId)/tasks/$($dependency.DeploymentTaskId))"
+                            Write-Highlight "⏳ $($dependency.ProjectName) $($dependency.VersionToDeploy) was successfully invoked, you can access the deployment [here]($octopusUrl/app#/$($dependency.SpaceId)/tasks/$($dependency.DeploymentTaskId))"
                         }
                 
                         if ($deploymentCounter -eq $dependenciesInGroup.Count)

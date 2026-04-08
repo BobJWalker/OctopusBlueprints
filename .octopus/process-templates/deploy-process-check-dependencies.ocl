@@ -1156,7 +1156,7 @@ step "check-dependencies" {
                 
                     if ([string]::IsNullOrWhiteSpace($parameterDependenciesAsJSON))
                     {
-                        Write-Error "The parameter dependencies was empty or whitespace, stopping the deployment since we don't know what dependencies to check"
+                        Write-Highlight "❌ The parameter dependencies was empty or whitespace, stopping the deployment since we don't know what dependencies to check"
                         exit 1
                     }
                 
@@ -1164,7 +1164,7 @@ step "check-dependencies" {
                 
                     if ($dependencyList.Count -eq 0)
                     {
-                        Write-Error "The parameter dependencies did not contain any dependencies, stopping the deployment since we don't know what dependencies to check"
+                        Write-Highlight "❌ The parameter dependencies did not contain any dependencies, stopping the deployment since we don't know what dependencies to check"
                         exit 1
                     }
                 
@@ -1172,19 +1172,19 @@ step "check-dependencies" {
                     {
                         if ([string]::IsNullOrWhiteSpace($dependency.ProjectName))
                         {
-                            Write-Error "One of the dependencies is missing the Project Name.  Stopping the deployment since we don't have enough information to check the dependencies."
+                            Write-Highlight "❌ One of the dependencies is missing the Project Name.  Stopping the deployment since we don't have enough information to check the dependencies."
                             exit 1
                         }
                 
                         if ([string]::IsNullOrWhiteSpace($dependency.VersionPattern))
                         {
-                            Write-Error "$($dependency.ProjectName) is missing the Version Pattern.  Stopping the deployment since we don't have enough information to check the dependencies."
+                            Write-Highlight "❌ $($dependency.ProjectName) is missing the Version Pattern.  Stopping the deployment since we don't have enough information to check the dependencies."
                             exit 1
                         }  
                         
                         if ($null -ne $dependency.DeployGroup -and ($null -eq ($dependency.DeployGroup -as [int])))
                         {
-                            Write-Error "$($dependency.ProjectName) has a Deploy Group value that is not an integer.  The deploy group can be null or an integer, but not a string.  Stopping the deployment."
+                            Write-Highlight "❌ $($dependency.ProjectName) has a Deploy Group value that is not an integer.  The deploy group can be null or an integer, but not a string.  Stopping the deployment."
                             exit 1
                         }
                 
@@ -1197,13 +1197,13 @@ step "check-dependencies" {
                         {
                             if ([string]::IsNullOrWhiteSpace($variable.Name))
                             {
-                                Write-Error "One of the prompted variables for $($dependency.ProjectName) is missing the name property.  Stopping the deployment since it will fail when we try to do a deployment for the project."
+                                Write-Highlight "❌ One of the prompted variables for $($dependency.ProjectName) is missing the name property.  Stopping the deployment since it will fail when we try to do a deployment for the project."
                                 exit 1
                             }
                 
                             if ([string]::IsNullOrWhiteSpace($variable.Value))
                             {
-                                Write-Error "One of the prompted variables for $($dependency.ProjectName) is missing the value property.  Stopping the deployment since it will fail when we try to do a deployment for the project."
+                                Write-Highlight "❌ One of the prompted variables for $($dependency.ProjectName) is missing the value property.  Stopping the deployment since it will fail when we try to do a deployment for the project."
                                 exit 1
                             }
                         }
@@ -1221,7 +1221,7 @@ step "check-dependencies" {
                 
                     if ([string]::IsNullOrWhiteSpace($parameterValue))
                     {
-                        Write-Error "The parameter for $parameterName is empty or whitespace.  This parameter is required to check dependencies, so stopping the deployment."
+                        Write-Highlight "❌ The parameter for $parameterName is empty or whitespace.  This parameter is required to check dependencies, so stopping the deployment."
                         exit 1
                     }
                 }

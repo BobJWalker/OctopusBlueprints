@@ -1876,7 +1876,7 @@ step "deploy-dependencies" {
                     if ($null -eq $dependency.TenantId)
                     {
                         Write-Verbose "The deployment tenant id was not sent in, generating a preview by hitting releases/$($dependency.ReleaseIdToDeploy)/deployments/preview/$($dependency.TargetEnvironmentId)?includeDisabledSteps=true"    
-                        return Invoke-OctopusApi -octopusUrl $defaultUrl -endPoint "releases/$($dependency.ReleaseIdToDeploy)/deployments/preview/$($dependency.TargetEnvironmentId)?includeDisabledSteps=true" -apiKey $octopusApiKey -method "GET" -spaceId $spaceId
+                        return Invoke-OctopusApi -octopusUrl $octopusUrl -endPoint "releases/$($dependency.ReleaseIdToDeploy)/deployments/preview/$($dependency.TargetEnvironmentId)?includeDisabledSteps=true" -apiKey $octopusApiKey -method "GET" -spaceId $dependency.SpaceId
                     }
                 
                     Write-Verbose "The deployment tenant id was sent in, generating a preview by hitting releases/$($dependency.ReleaseIdToDeploy)/deployments/previews" 
@@ -1888,7 +1888,7 @@ step "deploy-dependencies" {
                                  }
                             )
                     }
-                    return Invoke-OctopusApi -octopusUrl $defaultUrl -endPoint "releases/$($dependency.ReleaseIdToDeploy)/deployments/previews" -apiKey $octopusApiKey -method "POST" -spaceId $spaceId -item $requestBody -itemIsArray $true
+                    return Invoke-OctopusApi -octopusUrl $octopusUrl -endPoint "releases/$($dependency.ReleaseIdToDeploy)/deployments/previews" -apiKey $octopusApiKey -method "POST" -spaceId $dependency.SpaceId -item $requestBody -itemIsArray $true
                 }
                 
                 function Get-ValuesForPromptedVariables
@@ -2032,6 +2032,8 @@ step "deploy-dependencies" {
                 }
                 
                 Write-Highlight "✅ All dependency deployments have been successfully verified."
+                
+                
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"

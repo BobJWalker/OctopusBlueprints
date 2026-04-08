@@ -1899,8 +1899,9 @@ step "deploy-dependencies" {
                     )
                 
                     $deploymentFormValues = @{}
-                    if ([string]::IsNullOrWhiteSpace($formValues) -eq $true)
+                    if ($null -eq $deploymentPreview.Form -or $null -eq $deploymentPreview.Form.Elements -or $deploymentPreview.Form.Elements.Count -eq 0)
                     {
+                        Write-Verbose "The deployment preview did not contain any form elements, returning empty form values"
                         return $deploymentFormValues
                     }  
                     

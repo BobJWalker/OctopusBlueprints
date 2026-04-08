@@ -1875,11 +1875,11 @@ step "deploy-dependencies" {
                 
                     if ($null -eq $dependency.TenantId)
                     {
-                        Write-OctopusInformation "The deployment tenant id was not sent in, generating a preview by hitting releases/$($dependency.ReleaseIdToDeploy)/deployments/preview/$($dependency.TargetEnvironmentId)?includeDisabledSteps=true"    
+                        Write-Verbose "The deployment tenant id was not sent in, generating a preview by hitting releases/$($dependency.ReleaseIdToDeploy)/deployments/preview/$($dependency.TargetEnvironmentId)?includeDisabledSteps=true"    
                         return Invoke-OctopusApi -octopusUrl $defaultUrl -endPoint "releases/$($dependency.ReleaseIdToDeploy)/deployments/preview/$($dependency.TargetEnvironmentId)?includeDisabledSteps=true" -apiKey $octopusApiKey -method "GET" -spaceId $spaceId
                     }
                 
-                    Write-OctopusInformation "The deployment tenant id was sent in, generating a preview by hitting releases/$($dependency.ReleaseIdToDeploy)/deployments/previews" 
+                    Write-Verbose "The deployment tenant id was sent in, generating a preview by hitting releases/$($dependency.ReleaseIdToDeploy)/deployments/previews" 
                     $requestBody = @{
                     		DeploymentPreviews = @(
                     			@{
@@ -1906,11 +1906,11 @@ step "deploy-dependencies" {
                     
                     if ($null -eq $dependency.promptedVariables -or $dependency.promptedVariables.Count -eq 0)
                     {
-                        Write-OctopusVerbose "Form values were provided but there are no prompted variables in the deployment preview, returning empty form values"
+                        Write-Verbose "Form values were provided but there are no prompted variables in the deployment preview, returning empty form values"
                         return $deploymentFormValues
                     }
                         
-                    Write-OctopusVerbose $promptedValueList.Length
+                    Write-Verbose $promptedValueList.Length
                     
                     foreach($element in $deploymentPreview.Form.Elements)
                     {
@@ -1921,22 +1921,22 @@ step "deploy-dependencies" {
                         
                         $promptedVariableFound = $false
                         
-                        Write-OctopusVerbose "Looking for the prompted variable value for $nameToSearchFor"
+                        Write-Verbose "Looking for the prompted variable value for $nameToSearchFor"
                         foreach ($promptedValue in $dependency.promptedVariables)
                         {            
-                            Write-OctopusVerbose "Comparing $nameToSearchFor with provided prompted variable $($promptedValue.Name)"
+                            Write-Verbose "Comparing $nameToSearchFor with provided prompted variable $($promptedValue.Name)"
                             if ($nameToSearchFor.ToLower().Trim() -eq $promptedValue.Name.ToLower().Trim())
                             {
-                                Write-OctopusVerbose "Found the prompted variable value $nameToSearchFor"
+                                Write-Verbose "Found the prompted variable value $nameToSearchFor"
                                 $deploymentFormValues[$uniqueName] = $promptedValue.Value
                                 $promptedVariableFound = $true
                                 break
                             }
                 
-                            Write-OctopusVerbose "Comparing $labelToSearchFor with provided prompted variable $($promptedValue.Name)"
+                            Write-Verbose "Comparing $labelToSearchFor with provided prompted variable $($promptedValue.Name)"
                             if ($labelToSearchFor.ToLower().Trim() -eq $promptedValue.Name.ToLower().Trim())
                             {
-                                Write-OctopusVerbose "Found the prompted variable value $labelToSearchFor"
+                                Write-Verbose "Found the prompted variable value $labelToSearchFor"
                                 $deploymentFormValues[$uniqueName] = $promptedValue.Value
                                 $promptedVariableFound = $true
                                 break
@@ -1945,7 +1945,7 @@ step "deploy-dependencies" {
                         
                         if ($promptedVariableFound -eq $false -and $isRequired -eq $true)
                         {
-                            Write-OctopusCritical "Unable to find a value for the required prompted variable $nameToSearchFor, exiting"
+                            Write-Highlight "❌ Unable to find a value for $($dependency.ProjectName) the required prompted variable $nameToSearchFor or the label $labelToSearchFor.  Failing deployment now since the required value is missing."
                             Exit 1
                         }
                     }
@@ -2032,8 +2032,6 @@ step "deploy-dependencies" {
                 }
                 
                 Write-Highlight "✅ All dependency deployments have been successfully verified."
-                
-                
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "PowerShell"

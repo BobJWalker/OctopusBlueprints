@@ -1915,10 +1915,11 @@ step "deploy-dependencies" {
                     foreach($element in $deploymentPreview.Form.Elements)
                     {
                         $nameToSearchFor = $element.Control.Name
+                        $labelToSearchFor = $element.Control.Label
                         $uniqueName = $element.Name
                         $isRequired = $element.Control.Required
                         
-                        $promptedVariablefound = $false
+                        $promptedVariableFound = $false
                         
                         Write-OctopusVerbose "Looking for the prompted variable value for $nameToSearchFor"
                         foreach ($promptedValue in $dependency.promptedVariables)
@@ -1927,6 +1928,15 @@ step "deploy-dependencies" {
                             if ($nameToSearchFor.ToLower().Trim() -eq $promptedValue.Name.ToLower().Trim())
                             {
                                 Write-OctopusVerbose "Found the prompted variable value $nameToSearchFor"
+                                $deploymentFormValues[$uniqueName] = $promptedValue.Value
+                                $promptedVariableFound = $true
+                                break
+                            }
+                
+                            Write-OctopusVerbose "Comparing $labelToSearchFor with provided prompted variable $($promptedValue.Name)"
+                            if ($labelToSearchFor.ToLower().Trim() -eq $promptedValue.Name.ToLower().Trim())
+                            {
+                                Write-OctopusVerbose "Found the prompted variable value $labelToSearchFor"
                                 $deploymentFormValues[$uniqueName] = $promptedValue.Value
                                 $promptedVariableFound = $true
                                 break

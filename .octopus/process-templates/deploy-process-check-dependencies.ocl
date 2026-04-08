@@ -27,6 +27,16 @@ parameter "Template.Octopus.Api.Key" {
     label = "Octopus Deploy API Key"
 }
 
+parameter "Template.Environment.Name" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "**Required** - The name of the target environment you want to check and deploy dependencies to."
+    label = "Target Environment"
+
+    value "#{Octopus.Environment.Name}" {}
+}
+
 parameter "Template.Dependency.Projects" {
     display_settings = {
         Octopus.ControlType = "MultiLineText"
@@ -40,7 +50,6 @@ parameter "Template.Dependency.Projects" {
                 "projectName": "Spear", 
                 "versionPattern": ">1.0.42", 
                 "deployGroup": 1,    
-                "spaceName": "Default",
               },
               {
                 "versionPattern": "~2.4.0",
@@ -124,16 +133,6 @@ parameter "Template.Dependency.Action" {
     value "Stop" {}
 }
 
-parameter "Template.Environment.Name" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = "**Required** - The name of the target environment you want to check and deploy dependencies to."
-    label = "Target Environment"
-
-    value "#{Octopus.Environment.Name}" {}
-}
-
 parameter "Template.Dependency.Approval" {
     display_settings = {
         Octopus.ControlType = "Select"
@@ -163,17 +162,6 @@ parameter "Template.Approval.Teams" {
     label = "Approval Teams"
 }
 
-parameter "Template.Tenant.Name" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = "**Optional** - The name of the tenant you want to check and deploy the dependencies for"
-    is_optional = true
-    label = "Target Tenant"
-
-    value "#{Octopus.Deployment.Tenant.Name}" {}
-}
-
 parameter "Template.ChangeRequest.ReuseChangeRequest" {
     display_settings = {
         Octopus.ControlType = "Select"
@@ -183,13 +171,24 @@ parameter "Template.ChangeRequest.ReuseChangeRequest" {
             EOT
     }
     help_text = <<-EOT
-            When set to `Yes` it will send down the change request number to the dependent projects from this project.
+            **Required** - When set to `Yes` it will reuse the change request number for all the dependent projects that need to be deployed with ITSM approvals configured.
             
-            **Important** - the dependent project has to be configured for ITSM approvals.
+            **Important** - the dependent project has to be configured for the same ITSM approval workflow.  
             EOT
     label = "Reuse Change Request on Dependencies"
 
     value "No" {}
+}
+
+parameter "Template.Tenant.Name" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "**Optional** - The name of the tenant you want to check and deploy the dependencies for"
+    is_optional = true
+    label = "Target Tenant"
+
+    value "#{Octopus.Deployment.Tenant.Name}" {}
 }
 
 step "check-dependencies" {
@@ -402,23 +401,35 @@ step "check-dependencies" {
                 {
                     param(
                         $itemList,
-                        $itemName
+                        $itemName, 
+                        $defaultValue
                     )
                 
-                    if ($itemList.Count -eq 0)
+                    if ($itemList.Count -eq 0 -and $null -eq $defaultValue)
                     {
-                        Write-Error "Unable to find $itemName.  Exiting with an exit code of 1."
+                        Write-Error "Unable to find $itemName and a default value isn't defined.  Exiting with an exit code of 1."
                         Exit 1
                     }  
+                    elseif($itemList.Count -eq 0 -and $null -ne $defaultValue)
+                    {
+                        Write-Host "Unable to find $itemName, but a default value is defined, so returning the default value."
+                        return $defaultValue
+                    }
                 
                     $item = $itemList | Where-Object { $_.Name.ToLower().Trim() -eq $itemName.ToLower().Trim() }      
                 
-                    if ($null -eq $item)
+                    if ($null -eq $item -and $null -eq $defaultValue)
                     {
-                        Write-Error "Unable to find $itemName.  Exiting with an exit code of 1."
+                        Write-Error "Unable to find $itemName and a default value isn't defined.  Exiting with an exit code of 1."
                         exit 1
                     }
+                    elseif ($null -eq $item -and $null -ne $defaultValue)
+                    {
+                        Write-Host "Unable to find $itemName, but a default value is defined, so returning the default value."
+                        return $defaultValue
+                    }
                 
+                    Write-Host "Successfully found $itemName with an id of $($item.Id)"
                     return $item
                 }
                 
@@ -434,11 +445,6 @@ step "check-dependencies" {
                         $octopusApiKey
                     )
                 
-                    if ($null -ne $defaultValue)
-                    {
-                        return $defaultValue
-                    }
-                
                     if ([string]::IsNullOrWhiteSpace($itemName) -or $itemName -like "#{Octopus*")
                     {
                         Write-Verbose "The item name passed in was $itemName, returning the default value for $itemType"
@@ -448,11 +454,8 @@ step "check-dependencies" {
                     Write-Host "Attempting to find $itemType with the name of $itemName"
                     
                     $itemList = Get-ListFromOctopusApi -octopusUrl $octopusUrl -endPoint "$($endPoint)?partialName=$([uri]::EscapeDataString($itemName))&skip=0&take=100" -spaceId $spaceId -apiKey $octopusApiKey -method "GET" -propertyName "Items"   
-                    $item = Get-FilteredOctopusItem -itemList $itemList -itemName $itemName
                 
-                    Write-Host "Successfully found $itemName with id of $($item.Id)"
-                
-                    return $item
+                    return Get-FilteredOctopusItem -itemList $itemList -itemName $itemName -defaultValue $defaultValue        
                 }
                 
                 function Wait-ForExecutingTasksToComplete {
@@ -466,7 +469,7 @@ step "check-dependencies" {
                         $octopusApiKey
                     )   
                 
-                    $taskEndPoint = "tasks?skip=0&take=100&spaces=$spaceId&includeSystem=false&project=$($project.Id)&name=Deploy&states=Executing"
+                    $taskEndPoint = "tasks?skip=0&take=20&spaces=$spaceId&includeSystem=false&project=$($project.Id)&name=Deploy&states=Executing"
                     if ($null -ne $tenant)
                     {
                         $taskEndPoint += "&tenant=$($tenant.Id)"
@@ -511,7 +514,7 @@ step "check-dependencies" {
                         $octopusApiKey
                     )    
                 
-                    $taskEndPoint = "tasks?skip=0&take=100&spaces=$spaceId&includeSystem=false&project=$($project.Id)&name=Deploy&states=Success"
+                    $taskEndPoint = "tasks?skip=0&take=20&spaces=$spaceId&includeSystem=false&project=$($project.Id)&name=Deploy&states=Success"
                 
                     if ($null -ne $tenant)
                     {
@@ -975,7 +978,8 @@ step "check-dependencies" {
                 function Get-DependencyAction {
                     param(
                         $dependencyAction,
-                        $defaultDependencyAction
+                        $defaultDependencyAction,
+                        $dependency
                     )
                 
                     if ($null -ne $dependencyAction)
@@ -996,6 +1000,7 @@ step "check-dependencies" {
                         return $dependencyAction
                     }
                 
+                    Write-Highlight "⚠️ The dependency action passed for $($dependency.ProjectName) was $dependencyAction which is not a valid dependency action.  The valid dependency actions are Stop, Continue, DeployNewerMatching, and DeployNoMatchingInTarget.  Using the default dependency action for this dependency check, which is $defaultDependencyAction"
                     return $defaultDependencyAction
                 }
                 
@@ -1143,7 +1148,91 @@ step "check-dependencies" {
                     return $false
                 }
                 
-                $dependencyList = ConvertFrom-Json $parameterDependencies
+                function Get-DependencyList
+                {
+                    param (
+                        $parameterDependenciesAsJSON
+                    )
+                
+                    if ([string]::IsNullOrWhiteSpace($parameterDependenciesAsJSON))
+                    {
+                        Write-Error "The parameter dependencies was empty or whitespace, stopping the deployment since we don't know what dependencies to check"
+                        exit 1
+                    }
+                
+                    $dependencyList = @(ConvertFrom-Json $parameterDependenciesAsJSON)
+                
+                    if ($dependencyList.Count -eq 0)
+                    {
+                        Write-Error "The parameter dependencies did not contain any dependencies, stopping the deployment since we don't know what dependencies to check"
+                        exit 1
+                    }
+                
+                    foreach ($dependency in $dependencyList)
+                    {
+                        if ([string]::IsNullOrWhiteSpace($dependency.ProjectName))
+                        {
+                            Write-Error "One of the dependencies is missing the Project Name.  Stopping the deployment since we don't have enough information to check the dependencies."
+                            exit 1
+                        }
+                
+                        if ([string]::IsNullOrWhiteSpace($dependency.VersionPattern))
+                        {
+                            Write-Error "$($dependency.ProjectName) is missing the Version Pattern.  Stopping the deployment since we don't have enough information to check the dependencies."
+                            exit 1
+                        }  
+                        
+                        if ($null -ne $dependency.DeployGroup -and ($null -eq ($dependency.DeployGroup -as [int])))
+                        {
+                            Write-Error "$($dependency.ProjectName) has a Deploy Group value that is not an integer.  The deploy group can be null or an integer, but not a string.  Stopping the deployment."
+                            exit 1
+                        }
+                
+                        if ($null -eq $dependency.PromptedVariables)
+                        {
+                            continue
+                        }
+                
+                        foreach ($variable in $dependency.PromptedVariables)
+                        {
+                            if ([string]::IsNullOrWhiteSpace($variable.Name))
+                            {
+                                Write-Error "One of the prompted variables for $($dependency.ProjectName) is missing the name property.  Stopping the deployment since it will fail when we try to do a deployment for the project."
+                                exit 1
+                            }
+                
+                            if ([string]::IsNullOrWhiteSpace($variable.Value))
+                            {
+                                Write-Error "One of the prompted variables for $($dependency.ProjectName) is missing the value property.  Stopping the deployment since it will fail when we try to do a deployment for the project."
+                                exit 1
+                            }
+                        }
+                    }
+                
+                    return ,$dependencyList
+                }
+                
+                function Test-InputStringParameter
+                {
+                    param(
+                        $parameterValue,
+                        $parameterName
+                    )
+                
+                    if ([string]::IsNullOrWhiteSpace($parameterValue))
+                    {
+                        Write-Error "The parameter for $parameterName is empty or whitespace.  This parameter is required to check dependencies, so stopping the deployment."
+                        exit 1
+                    }
+                }
+                
+                Test-InputStringParameter -parameterValue $parameterOctopusAPIKey -parameterName "Octopus API Key"
+                Test-InputStringParameter -parameterValue $parameterTargetEnvironmentName -parameterName "Target Environment Name"
+                Test-InputStringParameter -parameterValue $parameterOlderDependencyAction -parameterName "Default Dependency Action"
+                Test-InputStringParameter -parameterValue $parameterApprovalRequested -parameterName "Approval Requested"
+                Test-InputStringParameter -parameterValue $parameterReuseChangeRequest -parameterName "Reuse Change Request"
+                
+                $dependencyList = Get-DependencyList -parameterDependenciesAsJSON $parameterDependencies
                 
                 $defaultSpace = Get-OctopusItemByName -itemName $parameterSpaceName -itemType "Space" -endpoint "spaces" -defaultValue $null -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 $defaultEnvironment = Get-OctopusItemByName -itemName $parameterTargetEnvironmentName -itemType "Environment" -endpoint "environments" -defaultValue $null -spaceId $defaultSpace.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
@@ -1160,24 +1249,28 @@ step "check-dependencies" {
                     $space = Get-OctopusItemByName -itemName $dependency.SpaceName -itemType "Space" -endpoint "spaces" -defaultValue $defaultSpace -spaceId $null -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey    
                     $project = Get-OctopusItemByName -itemName $dependency.ProjectName -itemType "Project" -endpoint "projects" -defaultValue $null -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $tenant = Get-OctopusItemByName -itemName $dependency.TenantName -itemType "Tenant" -endpoint "tenants" -defaultValue $defaultTenant -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
-                    $dependencyAction = Get-DependencyAction -dependencyAction $dependency.DependencyAction -defaultDependencyAction $parameterOlderDependencyAction    
+                
+                    # Check to see if the dependency has a specific dependency action specified, if not use the default dependency action passed in as a parameter
+                    $dependencyAction = Get-DependencyAction -dependencyAction $dependency.DependencyAction -defaultDependencyAction $parameterOlderDependencyAction -dependency $dependency  
                 
                     # If enough people want to be able to override the environment, we can quickly add the logic here
                     $environment = $defaultEnvironment
+                
+                    # If we have to trigger a deployment it's best to reuse the guided failure mode of the project / environment
                     $guidedFailureMode = Get-GuidedFailureMode -environment $environment -project $project
                 
-                    # Get Information about the source environments and channels first
+                    # Get Information about the source environments from the channels matching the target environment
                     $matchingChannels = Get-ProjectChannelsWithDestinationEnvironment -project $project -environment $environment -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $sourceEnvironments = Get-SourceEnvironmentsFromPhase -matchingChannels $matchingChannels -environment $environment
                 
                     # Wait for active deployments to finish before pulling deployment information to ensure we have the most up to date information
                     Wait-ForExecutingTasksToComplete -spaceId $space.Id -project $project -tenant $tenant -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -sourceEnvironmentList $sourceEnvironments -targetEnvironment $environment
                 
-                    # Pull in all the successful deployments for the target environment
+                    # Pull in the last 20 successful deployments for the target environment and find the deployed version that matches the dependency pattern if it exists
                     $deploymentTasks = Get-SuccessfulDeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList @($environment.Id) -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $deployedVersion = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $deploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey  
                         
-                    # Pull in all the successful deployments for the source environments to find a version to deploy if needed
+                    # Pull in the last 20 successful deployments for the source environments to find a version to deploy if needed
                     $sourceDeploymentTasks = Get-SuccessfulDeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 
@@ -1724,7 +1817,7 @@ step "deploy-dependencies" {
                     $dependencyAsString = $dependency | ConvertTo-Json
                     Write-Host $dependencyAsString
                 
-                    Write-Host "The prompted variables for this deployment are $($promptedVariables | ConvertTo-Json)"
+                    Write-Host "The prompted variables that'll be sent in the deployment request are $($promptedVariables | ConvertTo-Json)"
                 
                     $deploymentRequest = @{
                         EnvironmentId = $dependency.TargetEnvironmentId;

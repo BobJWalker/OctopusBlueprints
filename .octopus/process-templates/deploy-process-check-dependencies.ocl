@@ -1344,7 +1344,7 @@ step "check-dependencies" {
                 Set-OctopusVariable -name "ApprovalMessages" -value $approvalResult
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.ApprovalMessages}"
                 
-                $dependencyResultAsString = ConvertTo-Json $dependencyResultList
+                $dependencyResultAsString = ConvertTo-Json $dependencyResultList -Depth 10
                 Write-Host "Adding DependencyResult as an output variable with the value $dependencyResultAsString"
                 Set-OctopusVariable -name "DependencyResult" -value $dependencyResultAsString
                 Write-Host "Access it from future steps using: #{Octopus.ProcessTemplate.Action[$stepName].Output.DependencyResult}"
@@ -1800,7 +1800,7 @@ step "deploy-dependencies" {
                         "TenantName" = $dependency.TenantName
                         "SnowChangeRequestNumber" = $dependency.SnowChangeRequestNumber
                         "JSMChangeRequestNumber" = $dependency.JSMChangeRequestNumber
-                        "PromptedVariables" = $dependency.PromptedVariables
+                        "PromptedVariables" = @($dependency.PromptedVariables)
                         "GuidedFailures" = $dependency.GuidedFailures
                 
                         "DeploymentTaskId" = $null        
@@ -1814,10 +1814,10 @@ step "deploy-dependencies" {
                     )
                 
                     Write-Host "Converting the dependency for project $($dependency.ProjectName) to environment $($dependency.TargetEnvironmentName) into a deployment request body for the Octopus API"    
-                    $dependencyAsString = $dependency | ConvertTo-Json
+                    $dependencyAsString = $dependency | ConvertTo-Json -Depth 10
                     Write-Host $dependencyAsString
                 
-                    Write-Host "The prompted variables that'll be sent in the deployment request are $($promptedVariables | ConvertTo-Json)"
+                    Write-Host "The prompted variables that'll be sent in the deployment request are $($promptedVariables | ConvertTo-Json -Depth 10)"
                 
                     $deploymentRequest = @{
                         EnvironmentId = $dependency.TargetEnvironmentId;
@@ -1954,7 +1954,7 @@ step "deploy-dependencies" {
                 }
                     
                 
-                $dependencyResultList = $parameterDependencyResults | ConvertFrom-Json
+                $dependencyResultList = $parameterDependencyResults | ConvertFrom-Json -Depth 10
                 $taskCapLimit = Get-TaskCapLimitFromApi -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 $deployGroupInfo = Get-DeployGroupInfo -dependencyResultList $dependencyResultList
                 

@@ -1317,7 +1317,8 @@ step "check-dependencies" {
                     $deployedVersion = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $deploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey  
                         
                     # Pull in the last 20 successful deployments for the source environments to find a version to deploy if needed
-                    $sourceDeploymentTasks = Get-SuccessfulDeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -tenantAssignedToEnvironment $tenantIsAssignedToEnvironment
+                    $tenantIsAssignedToSourceEnvironments = Test-TenantEnvironmentAssignment -tenant $tenant -environmentList $sourceEnvironments -project $project
+                    $sourceDeploymentTasks = Get-SuccessfulDeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -tenantAssignedToEnvironment $tenantIsAssignedToSourceEnvironments
                     $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 
                     # Pull the change request number to send to the dependencies

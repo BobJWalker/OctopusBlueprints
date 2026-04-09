@@ -870,7 +870,7 @@ step "check-dependencies" {
                         $dependencyAction,
                         $approvalRequested,
                         $tenant, 
-                        $tenantIsAssignedToEnvironment
+                        $tenantAssignedToEnvironment
                     )
                 
                     $deploymentIsNeeded = $false
@@ -891,8 +891,8 @@ step "check-dependencies" {
                     Write-Host "The dependency action for $($dependency.ProjectName) is $loweredDependencyAction and the approval requested value is $approvalRequested"
                     Write-Host "The deployed version for $($dependency.ProjectName) in $($environment.Name) is $deployedVersion and the source version to deploy from previous environments is $sourceVersionToDeploy.  The version comparison result is $versionComparison (true means the source version to deploy is newer than the deployed version, false means it is not newer or a version was not found in one of the environments)."
                 
-                    Write-Verbose "Checking if tenant $($tenant.Name) is assigned to environment $($environment.Name) for project $($dependency.ProjectName).  The value of tenantIsAssignedToEnvironment is $tenantIsAssignedToEnvironment"
-                    if ($null -ne $tenant -and $tenantIsAssignedToEnvironment -eq $false)
+                    Write-Verbose "Checking if tenant $($tenant.Name) is assigned to environment $($environment.Name) for project $($dependency.ProjectName).  The value of tenantAssignedToEnvironment is $tenantAssignedToEnvironment"
+                    if ($null -ne $tenant -and $tenantAssignedToEnvironment -eq $false)
                     {
                         $reason = "✅ $($tenant.Name) is not assigned to $($dependency.ProjectName) in $($environment.Name). Ignoring this dependency and continuing with the deployment."
                     }

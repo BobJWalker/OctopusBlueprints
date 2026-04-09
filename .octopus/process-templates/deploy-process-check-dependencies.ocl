@@ -868,7 +868,9 @@ step "check-dependencies" {
                         $dependency,
                         $environment,
                         $dependencyAction,
-                        $approvalRequested
+                        $approvalRequested,
+                        $tenant, 
+                        $tenantIsAssignedToEnvironment
                     )
                 
                     $deploymentIsNeeded = $false
@@ -889,11 +891,15 @@ step "check-dependencies" {
                     Write-Host "The dependency action for $($dependency.ProjectName) is $loweredDependencyAction and the approval requested value is $approvalRequested"
                     Write-Host "The deployed version for $($dependency.ProjectName) in $($environment.Name) is $deployedVersion and the source version to deploy from previous environments is $sourceVersionToDeploy.  The version comparison result is $versionComparison (true means the source version to deploy is newer than the deployed version, false means it is not newer or a version was not found in one of the environments)."
                 
-                    if ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $loweredDependencyAction -eq "stop")
+                    if ($null -ne $tenant -and $tenantIsAssignedToEnvironment -eq $false)
+                    {
+                        $reason = "✅ $($tenant.Name) is not assigned to $($dependency.ProjectName) in $($environment.Name). Ignoring this dependency and continuing with the deployment."
+                    }
+                    elseif ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $loweredDependencyAction -eq "stop")
                     {
                         $failDeployment = $true
                         $reason = "❌ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Stop, so failing the deployment."        
-                    }
+                    }    
                     elseif ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $loweredDependencyAction -like "deploy*")
                     {
                         $failDeployment = $true
@@ -1226,6 +1232,37 @@ step "check-dependencies" {
                     }
                 }
                 
+                function Test-TenantEnvironmentAssignment
+                {
+                    param(
+                        $tenant,
+                        $environment,
+                        $project
+                    )
+                
+                    $projectId = $project.Id
+                
+                    if ($null -eq $tenant)
+                    {
+                        Write-Verbose "Tenant is null, skipping tenant environment assignment check."
+                        return $false
+                    }
+                
+                    if ($null -eq (Get-Member -InputObject $tenant.ProjectEnvironments -Name $projectId -MemberType Properties))
+                    {
+                        Write-Verbose "The tenant $($tenant.Name) is not assigned to $($project.Name).  Skipping dependency check for this tenant."
+                        return $false            
+                    }
+                    
+                    if ($tenant.ProjectEnvironments.$projectId -notcontains $environment.Id)
+                    {
+                        Write-Verbose "The tenant $($tenant.Name) is NOT assigned to environment $($environment.Name) for project $($project.Name).  Skipping dependency check for this tenant."
+                        return $false
+                    }
+                
+                    return $true
+                }
+                
                 Test-InputStringParameter -parameterValue $parameterOctopusAPIKey -parameterName "Octopus API Key"
                 Test-InputStringParameter -parameterValue $parameterTargetEnvironmentName -parameterName "Target Environment Name"
                 Test-InputStringParameter -parameterValue $parameterOlderDependencyAction -parameterName "Default Dependency Action"
@@ -1259,6 +1296,9 @@ step "check-dependencies" {
                     # If we have to trigger a deployment it's best to reuse the guided failure mode of the project / environment
                     $guidedFailureMode = Get-GuidedFailureMode -environment $environment -project $project
                 
+                    # Determine if the tenant is assigned to the environment for this project
+                    $tenantIsAssignedToEnvironment = Test-TenantEnvironmentAssignment -tenant $tenant -environment $environment -project $project
+                
                     # Get Information about the source environments from the channels matching the target environment
                     $matchingChannels = Get-ProjectChannelsWithDestinationEnvironment -project $project -environment $environment -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                     $sourceEnvironments = Get-SourceEnvironmentsFromPhase -matchingChannels $matchingChannels -environment $environment
@@ -1279,7 +1319,7 @@ step "check-dependencies" {
                     $jsmChangeRequestNumber = Get-JSMChangeRequestNumber -changeRequestNumber $octopusVariableJSMChangeRequestNumber -environment $environment -project $project -reuseChangeRequest $parameterReuseChangeRequest
                 
                     # Get the action that we want to perform based on the version comparison and the dependency action specified
-                    $dependencyCompareResult = Get-VersionCompareResult -deployedVersion $deployedVersion.Version -sourceVersionToDeploy $sourceVersionToDeploy.Version -dependency $dependency -environment $environment -dependencyAction $dependencyAction -approvalRequested $parameterApprovalRequested
+                    $dependencyCompareResult = Get-VersionCompareResult -deployedVersion $deployedVersion.Version -sourceVersionToDeploy $sourceVersionToDeploy.Version -dependency $dependency -environment $environment -dependencyAction $dependencyAction -approvalRequested $parameterApprovalRequested -tenant $tenant -tenantAssignedToEnvironment $tenantIsAssignedToEnvironment
                 
                     Write-Highlight "$($dependencyCompareResult.Reason)"
                     

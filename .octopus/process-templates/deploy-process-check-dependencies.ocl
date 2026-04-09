@@ -508,7 +508,8 @@ step "check-dependencies" {
                     param (
                         $spaceId,
                         $project,
-                        $tenant,        
+                        $tenant,      
+                        $tenantAssignedToEnvironment,  
                         $environmentList,
                         $octopusUrl,
                         $octopusApiKey
@@ -516,7 +517,7 @@ step "check-dependencies" {
                 
                     $taskEndPoint = "tasks?skip=0&take=20&spaces=$spaceId&includeSystem=false&project=$($project.Id)&name=Deploy&states=Success"
                 
-                    if ($null -ne $tenant)
+                    if ($null -ne $tenant -and $tenantAssignedToEnvironment -eq $true)
                     {
                         $taskEndPoint += "&tenant=$($tenant.Id)"
                     }
@@ -899,73 +900,73 @@ step "check-dependencies" {
                     elseif ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $loweredDependencyAction -eq "stop")
                     {
                         $failDeployment = $true
-                        $reason = "❌ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Stop, so failing the deployment."        
+                        $reason = "❌($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Stop, so failing the deployment."        
                     }    
                     elseif ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $loweredDependencyAction -like "deploy*")
                     {
                         $failDeployment = $true
-                        $reason = "❌ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is to deploy a newer version, but there is no version to deploy, so failing the deployment."        
+                        $reason = "❌($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is to deploy a newer version, but there is no version to deploy, so failing the deployment."        
                     }
                     elseif ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $loweredDependencyAction -eq "continue" -and $approvalRequested -eq "Yes")
                     {
                         $approvalRequired = $true
-                        $reason = "⚠️ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Continue and a Approval is required to continue."
+                        $reason = "⚠️($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Continue and a Approval is required to continue."
                     }
                     elseif ($null -eq $deployedVersion -and $null -eq $sourceVersionToDeploy -and $loweredDependencyAction -eq "continue" -and $approvalRequested -eq "No")
                     {        
-                        $reason = "✅ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Continue but NO Approval is required to continue."
+                        $reason = "✅($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern), and there is no version matching $($dependency.versionPattern) in previous environments to deploy.  The action is Continue but NO Approval is required to continue."
                     }
                     elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $loweredDependencyAction -eq "stop")
                     {
                         $failDeployment = $true
-                        $reason = "❌ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). It needs to deploy $($sourceVersionToDeploy), but the action is Stop, so failing the deployment."
+                        $reason = "❌($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). It needs to deploy $($sourceVersionToDeploy), but the action is Stop, so failing the deployment."
                     }
                     elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $loweredDependencyAction -eq "continue" -and $approvalRequested -eq "Yes")
                     {
                         $approvalRequired = $true
-                        $reason = "✅ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). It needs to deploy $($sourceVersionToDeploy).  The action is Continue and Approval is required to continue."
+                        $reason = "✅($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). It needs to deploy $($sourceVersionToDeploy).  The action is Continue and Approval is required to continue."
                     }
                     elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $loweredDependencyAction -eq "continue" -and $approvalRequested -eq "No")
                     {                
-                        $reason = "✅ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). It needs to deploy $($sourceVersionToDeploy), but the action is Continue but NO Approval is required to continue deployment without deploying dependencies."
+                        $reason = "✅($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). It needs to deploy $($sourceVersionToDeploy), but the action is Continue but NO Approval is required to continue deployment without deploying dependencies."
                     }
                     elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $loweredDependencyAction -like "deploy*" -and $approvalRequested -eq "Yes")
                     {
                         $approvalRequired = $true
                         $deploymentIsNeeded = $true
-                        $reason = "⚠️ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). We will deploy $($sourceVersionToDeploy).  Approval is required to continue."
+                        $reason = "⚠️($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). We will deploy $($sourceVersionToDeploy).  Approval is required to continue."
                     }
                     elseif ($null -eq $deployedVersion -and $null -ne $sourceVersionToDeploy -and $loweredDependencyAction -like "deploy*" -and $approvalRequested -eq "No")
                     {     
                         $deploymentIsNeeded = $true           
-                        $reason = "✅ $($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). We will deploy $($sourceVersionToDeploy), and NO Approval is required to continue deployment."
+                        $reason = "✅($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) does not have a version in $($environment.Name) that matches $($dependency.versionPattern). We will deploy $($sourceVersionToDeploy), and NO Approval is required to continue deployment."
                     }
                     elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $false)
                     {        
-                        $reason = "✅ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern) and is the latest version.  No deployment needed for $($dependency.ProjectName)."        
+                        $reason = "✅($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern) and is the latest version.  No deployment needed for $($dependency.ProjectName)."        
                     }
                     elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and ($loweredDependencyAction -eq "stop" -or $loweredDependencyAction -eq "continue"))
                     {        
-                        $reason = "✅ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The requirements are met and no deployment was requested, so no deployment will be performed on $($dependency.ProjectName)."        
+                        $reason = "✅($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The requirements are met and no deployment was requested, so no deployment will be performed on $($dependency.ProjectName)."        
                     }    
                     elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $loweredDependencyAction -eq "deploynomatchingintarget")
                     {        
-                        $reason = "✅ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The action is to only deploy when there is nothing matching in $($environment.Name), so no deployment will be performed on any dependencies."        
+                        $reason = "✅($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The action is to only deploy when there is nothing matching in $($environment.Name), so no deployment will be performed on any dependencies."        
                     }
                     elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $loweredDependencyAction -eq "deploynewermatching" -and $approvalRequested -eq "Yes")
                     {        
                         $approvalRequired = $true
                         $deploymentIsNeeded = $true
-                        $reason = "⚠️ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The dependency action is set to Deploy Newer Matching, so $($sourceVersionToDeploy) will be deployed.  Approval is required to continue."
+                        $reason = "⚠️($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The dependency action is set to Deploy Newer Matching, so $($sourceVersionToDeploy) will be deployed.  Approval is required to continue."
                     }    
                     elseif ($null -ne $deployedVersion -and $null -ne $sourceVersionToDeploy -and $versionComparison -eq $true -and $loweredDependencyAction -eq "deploynewermatching" -and $approvalRequested -eq "No")
                     {                
                         $deploymentIsNeeded = $true
-                        $reason = "⚠️ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The dependency action is set to Deploy Newer Matching and approval is not requested, so $($sourceVersionToDeploy) will be deployed without approval."
+                        $reason = "⚠️($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  Version $($sourceVersionToDeploy) was found in a previous environment and is newer.  The dependency action is set to Deploy Newer Matching and approval is not requested, so $($sourceVersionToDeploy) will be deployed without approval."
                     }
                     elseif ($null -ne $deployedVersion -and $null -eq $sourceVersionToDeploy)
                     {
-                        $reason = "✅ $($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  A previous environment was not detected (likely due to being first in the lifecycle).  All conditions are met.  No deployment needed for $($dependency.ProjectName)."
+                        $reason = "✅($(if ($tenant) { " $($tenant.Name) in " } else { " " }))$($dependency.ProjectName) has version $($deployedVersion) in $($environment.Name) which matches $($dependency.versionPattern).  A previous environment was not detected (likely due to being first in the lifecycle).  All conditions are met.  No deployment needed for $($dependency.ProjectName)."
                     }
                     else
                     {
@@ -1237,7 +1238,7 @@ step "check-dependencies" {
                 {
                     param(
                         $tenant,
-                        $environment,
+                        $environmentList,
                         $project
                     )
                 
@@ -1255,13 +1256,17 @@ step "check-dependencies" {
                         return $false            
                     }
                     
-                    if ($tenant.ProjectEnvironments.$projectId -notcontains $environment.Id)
+                    foreach ($environmentId in $environmentList)
                     {
-                        Write-Verbose "The tenant $($tenant.Name) is NOT assigned to environment $($environment.Name) for project $($project.Name).  Skipping dependency check for this tenant."
-                        return $false
+                        if ($tenant.ProjectEnvironments.$projectId -contains $environmentId)
+                        {
+                            Write-Verbose "The tenant $($tenant.Name) is assigned to environment $($environment.Name) for project $($project.Name).  Running dependency check for this tenant."
+                            return $true
+                        }
                     }
-                
-                    return $true
+                    
+                    Write-Verbose "The tenant $($tenant.Name) is NOT assigned to environment $($environment.Name) for project $($project.Name).  Skipping dependency check for this tenant."
+                    return $false
                 }
                 
                 Test-InputStringParameter -parameterValue $parameterOctopusAPIKey -parameterName "Octopus API Key"
@@ -1298,7 +1303,7 @@ step "check-dependencies" {
                     $guidedFailureMode = Get-GuidedFailureMode -environment $environment -project $project
                 
                     # Determine if the tenant is assigned to the environment for this project
-                    $tenantIsAssignedToEnvironment = Test-TenantEnvironmentAssignment -tenant $tenant -environment $environment -project $project
+                    $tenantIsAssignedToEnvironment = Test-TenantEnvironmentAssignment -tenant $tenant -environmentList @($environment.Id) -project $project
                 
                     # Get Information about the source environments from the channels matching the target environment
                     $matchingChannels = Get-ProjectChannelsWithDestinationEnvironment -project $project -environment $environment -spaceId $space.Id -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
@@ -1308,11 +1313,11 @@ step "check-dependencies" {
                     Wait-ForExecutingTasksToComplete -spaceId $space.Id -project $project -tenant $tenant -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -sourceEnvironmentList $sourceEnvironments -targetEnvironment $environment
                 
                     # Pull in the last 20 successful deployments for the target environment and find the deployed version that matches the dependency pattern if it exists
-                    $deploymentTasks = Get-SuccessfulDeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList @($environment.Id) -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $deploymentTasks = Get-SuccessfulDeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList @($environment.Id) -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -tenantAssignedToEnvironment $tenantIsAssignedToEnvironment
                     $deployedVersion = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $deploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey  
                         
                     # Pull in the last 20 successful deployments for the source environments to find a version to deploy if needed
-                    $sourceDeploymentTasks = Get-SuccessfulDeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
+                    $sourceDeploymentTasks = Get-SuccessfulDeploymentTasks -spaceId $space.Id -project $project -tenant $tenant -environmentList $sourceEnvironments -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey -tenantAssignedToEnvironment $tenantIsAssignedToEnvironment
                     $sourceVersionToDeploy = Get-MatchingDeployedVersion -dependency $dependency -deploymentTasks $sourceDeploymentTasks -space $space -octopusUrl $parameterOctopusInstance -octopusApiKey $parameterOctopusAPIKey
                 
                     # Pull the change request number to send to the dependencies

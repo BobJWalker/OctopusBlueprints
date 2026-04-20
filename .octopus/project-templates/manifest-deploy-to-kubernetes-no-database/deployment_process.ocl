@@ -254,10 +254,6 @@ process_template "verify-supply-chain" {
         value = "Template.SBOM.Artifact"
     }
 
-    parameter "Template.Git.AuthToken" {
-        value = "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.GitHubToken}"
-    }
-
     parameter "Template.Verify.WorkerPool" {
         value = "#{Template.Worker.Pool}"
     }
@@ -267,7 +263,15 @@ process_template "verify-supply-chain" {
     }
 
     parameter "Template.Verify.Attestations" {
-        value = "False"
+        value = "#{Template.DependencyVerify.Attestations}"
+    }
+
+    parameter "Template.Git.AuthToken" {
+        value = "#{Template.KeyVault.GitHub.Token}"
+    }
+
+    parameter "Template.Verify.AirGapped" {
+        value = "#{Template.Instance.IsAirGapped}"
     }
 }
 

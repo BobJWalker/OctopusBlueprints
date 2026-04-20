@@ -58,29 +58,48 @@ process_template "verify-supply-chain" {
     }
 }
 
-process_template "deploy-to-kubernetes" {
-    name = "Deploy to Kubernetes"
-    process_template_slug = "deploy-process-deploy-to-kubernetes-via-manifest"
-    version_mask = "2.X"
-
-    parameter "K8sTemplate.Target.Tag" {
-        value = "#{Template.Target.Tag}"
+step "deploy-to-k8s" {
+    name = "Deploy to K8s"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.Target.Tag}"
     }
 
-    parameter "K8sTemplate.Container" {
-        value = "Template.Container"
-    }
+    action {
+        action_type = "Octopus.KubernetesDeployRawYaml"
+        properties = {
+            Octopus.Action.GitRepository.Source = "External"
+            Octopus.Action.Kubernetes.DeploymentTimeout = "180"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYamlFileName = <<-EOT
+                k8s/base/*secrets.yaml
+                k8s/base/*deployment.yaml
+                EOT
+            Octopus.Action.KubernetesContainers.Namespace = "#{Template.K8s.Namespace}"
+            Octopus.Action.Package.JsonConfigurationVariablesTargets = "**/*.{yml,yaml}"
+            Octopus.Action.Script.ScriptSource = "GitRepository"
+        }
+        worker_pool_variable = "#{Template.Worker.Pool}"
 
-    parameter "K8sTemplate.Git.Repo" {
-        value = "#{Template.Git.Repo}"
-    }
+        git_dependencies {
+            default_branch = "main"
+            file_path_filters = ["k8s/base/*secrets.yaml", "k8s/base/*deployment.yaml"]
+            git_credential_id = "GitCredentialIds-1"
+            git_credential_type = "Library"
+            repository_uri = "#{Template.Git.Repo}"
+        }
 
-    parameter "K8sTemplate.Worker.Pool" {
-        value = "#{Template.Worker.Pool}"
-    }
-
-    parameter "K8sTemplate.Namespace" {
-        value = "#{Template.K8s.Namespace}"
+        packages "Template.Container" {
+            acquisition_location = "NotAcquired"
+            package_id = ""
+            properties = {
+                Extract = "false"
+                PackageParameterName = "Template.Container"
+                Purpose = "DockerImageReference"
+                SelectionMode = "deferred"
+            }
+        }
     }
 }
 

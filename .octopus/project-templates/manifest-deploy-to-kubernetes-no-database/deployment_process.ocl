@@ -49,12 +49,12 @@ process_template "verify-supply-chain" {
         value = "#{Template.DependencyVerify.Attestations}"
     }
 
-    parameter "Template.Git.AuthToken" {
-        value = "#{Template.KeyVault.GitHub.Token}"
-    }
-
     parameter "Template.Verify.AirGapped" {
         value = "#{Template.Instance.IsAirGapped}"
+    }
+
+    parameter "Template.Git.AuthToken" {
+        value = "#{Template.Variable.KeyVault.GitHub.Token}"
     }
 }
 
@@ -71,16 +71,16 @@ process_template "deploy-to-kubernetes" {
         value = "Template.Container"
     }
 
-    parameter "K8sTemplate.Namespace" {
-        value = "#{Template.K8s.Namespace}"
-    }
-
     parameter "K8sTemplate.Git.Repo" {
         value = "#{Template.Git.Repo}"
     }
 
     parameter "K8sTemplate.Worker.Pool" {
         value = "#{Template.Worker.Pool}"
+    }
+
+    parameter "K8sTemplate.Namespace" {
+        value = "#{Template.K8s.Namespace}"
     }
 }
 

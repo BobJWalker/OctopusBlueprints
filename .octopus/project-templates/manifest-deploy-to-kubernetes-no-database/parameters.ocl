@@ -22,6 +22,14 @@ parameter "Template.Container" {
     label = "Container to Deploy"
 }
 
+parameter "Template.K8s.Namespace" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The namespace in Kubernetes in which the deployment will run"
+    label = "Kubernetes Namespace"
+}
+
 parameter "Template.Git.Repo" {
     display_settings = {
         Octopus.ControlType = "SingleLineText"

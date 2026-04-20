@@ -2,42 +2,6 @@ variable "Template.ApplicationName.Prefix" {
     value "#{Octopus.Project.Name | ToLower | Replace \" \" \"-\"}#{if Octopus.Deployment.Tenant.Name}#{Octopus.Deployment.Tenant.Name | ToLower}#{if Octopus.Runbook.Tenant.Name}#{Octopus.Runbook.Tenant.Name | ToLower}#{/if}#{/if}" {}
 }
 
-variable "Template.Database.Name" {
-    value "#{Template.ApplicationName.Prefix}-#{Octopus.Environment.Name | ToLower}" {}
-}
-
-variable "Template.KeyVault.Sumologic.Url" {
-    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.SumoLogicUrl}" {}
-}
-
-variable "Template.KeyVault.SQLServer.User.Password" {
-    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.SQLUserPassword}" {}
-}
-
-variable "Template.KeyVault.SQLServer.User.Name" {
-    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.SQLUserName}" {}
-}
-
-variable "Template.KeyVault.SQLServer.Server.Name" {
-    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.SQLServerName}" {}
-}
-
-variable "Template.KeyVault.SQLServer.Connection.String" {
-    value "Server=tcp:#{KeyVault.SQLServer.Server.Name},1433;Database=#{Template.Database.Name};User Id=#{KeyVault.SQLServer.User.Name};Password=#{KeyVault.SQLServer.User.Password};trustServerCertificate=true;Persist Security Info=False;MultipleActiveResultSets=False;Encrypt=True;" {}
-}
-
-variable "Template.KeyVault.Slack.Webhook.Url" {
-    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.SlackWebhookUrl}" {}
-}
-
-variable "Template.KeyVault.Octopus.Api.Key" {
-    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.OctopusApiKey}" {}
-}
-
-variable "Template.KeyVault.GitHub.Token" {
-    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.GitHubToken}" {}
-}
-
 variable "Template.Container.Version" {
     value "#{Octopus.Action[Deploy Web App-Deploy Container].Package[K8sTemplate.Container].PackageVersion}" {}
 }
@@ -48,4 +12,16 @@ variable "Template.K8s.HostName" {
 
 variable "Template.K8s.Namespace" {
     value "#{Template.ApplicationName.Prefix}-#{Octopus.Environment.Name | ToLower }" {}
+}
+
+variable "Template.KeyVault.GitHub.Token" {
+    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.GitHubToken}" {}
+}
+
+variable "Template.KeyVault.Octopus.Api.Key" {
+    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.OctopusApiKey}" {}
+}
+
+variable "Template.KeyVault.Sumologic.Url" {
+    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.SumoLogicUrl}" {}
 }

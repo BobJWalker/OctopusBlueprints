@@ -300,3 +300,13 @@ process_template "deploy-to-kubernetes" {
         value = "#{Template.Worker.Pool}"
     }
 }
+
+process_template "send-completion-notification" {
+    name = "Send Completion Notification"
+    process_template_slug = "notification-emails"
+    version_mask = "1.X"
+
+    parameter "Template.EmailTeam" {
+        value = "#{Template.Notification.Team}"
+    }
+}

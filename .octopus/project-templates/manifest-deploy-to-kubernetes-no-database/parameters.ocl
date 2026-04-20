@@ -48,16 +48,6 @@ parameter "Template.ExecutionContainer.Feed" {
     label = "Execution Container Feed"
 }
 
-parameter "Template.Azure.Account" {
-    display_settings = {
-        Octopus.ControlType = "AzureAccount"
-    }
-    help_text = "The Azure Account to use when accessing secrets via the key vault"
-    label = "Azure Account"
-
-    value "azure-oidc" {}
-}
-
 parameter "Template.SBOM.Artifact" {
     display_settings = {
         Octopus.ControlType = "Package"
@@ -76,14 +66,44 @@ parameter "Template.DependencyVerify.Attestations" {
     value "true" {}
 }
 
-parameter "Template.Instance.IsAirGapped" {
+parameter "Template.Azure.Account" {
     display_settings = {
-        Octopus.ControlType = "Checkbox"
+        Octopus.ControlType = "AzureAccount"
     }
-    help_text = "Indicates that this instance is running on an Air Gapped environment - such as an isolated VM - and needs to skip some of the dependency verification and key vault steps"
-    label = "Is Running on Air Gapped Instance"
+    help_text = "The Azure Account to use when accessing secrets via the key vault"
+    label = "Azure Account"
 
-    value "false" {}
+    value "azure-oidc" {}
+}
+
+parameter "Template.KeyVault.Vault.Name" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The name of the Azure Key Vault to pull the secrets from"
+    label = "Key Vault Name"
+}
+
+parameter "Template.KeyVault.Keys.List" {
+    display_settings = {
+        Octopus.ControlType = "MultiLineText"
+    }
+    help_text = <<-EOT
+            The list of keys to pull from the key vault.
+            
+            Format: `Key Name` | `Output Variable Name` | `Default Value`
+            
+            Can provide multiple keys by a new line separation.  
+            EOT
+    label = "Key Vault Keys"
+
+    value {
+        value = <<-EOT
+                octopus-api-key | OctopusApiKey | blah
+                github-token | GitHubToken | blah
+                sumo-logic-url | SumoLogicUrl | blah
+                EOT
+    }
 }
 
 parameter "Template.Notification.Team" {
@@ -92,4 +112,14 @@ parameter "Template.Notification.Team" {
     }
     help_text = "The team in which to send deployment notifications"
     label = "Notification Team"
+}
+
+parameter "Template.Instance.IsAirGapped" {
+    display_settings = {
+        Octopus.ControlType = "Checkbox"
+    }
+    help_text = "Indicates that this instance is running on an Air Gapped environment - such as an isolated VM - and needs to skip some of the dependency verification and key vault steps"
+    label = "Is Running on Air Gapped Instance"
+
+    value "false" {}
 }

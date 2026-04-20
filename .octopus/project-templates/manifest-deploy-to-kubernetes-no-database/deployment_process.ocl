@@ -274,7 +274,7 @@ process_template "verify-supply-chain" {
 process_template "deploy-to-kubernetes" {
     name = "Deploy to Kubernetes"
     process_template_slug = "deploy-process-deploy-to-kubernetes-via-manifest"
-    version_mask = "1.X"
+    version_mask = "2.X"
 
     parameter "K8sTemplate.Target.Tag" {
         value = "#{Template.Target.Tag}"
@@ -290,10 +290,6 @@ process_template "deploy-to-kubernetes" {
 
     parameter "K8sTemplate.Git.Repo" {
         value = "#{Template.Git.Repo}"
-    }
-
-    parameter "K8sTemplate.Verification.Script.Path" {
-        value = "scripts/verifyDeployment.ps1"
     }
 
     parameter "K8sTemplate.Worker.Pool" {

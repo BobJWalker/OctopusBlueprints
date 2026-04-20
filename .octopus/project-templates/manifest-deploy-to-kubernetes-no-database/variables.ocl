@@ -1,27 +1,11 @@
-variable "Template.ApplicationName.Prefix" {
-    value "#{Octopus.Project.Name | ToLower | Replace \" \" \"-\"}#{if Octopus.Deployment.Tenant.Name}#{Octopus.Deployment.Tenant.Name | ToLower}#{if Octopus.Runbook.Tenant.Name}#{Octopus.Runbook.Tenant.Name | ToLower}#{/if}#{/if}" {}
+variable "Template.Variable.KeyVault.GitHub.Token" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.GitHubToken}" {}
 }
 
-variable "Template.Container.Version" {
-    value "#{Octopus.Action[Deploy Web App-Deploy Container].Package[K8sTemplate.Container].PackageVersion}" {}
+variable "Template.Variable.KeyVault.Octopus.Api.Key" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.OctopusApiKey}" {}
 }
 
-variable "Template.K8s.HostName" {
-    value "#{Template.ApplicationName.Prefix}#{Octopus.Environment.Name | ToLower }.bobjwalker.local" {}
-}
-
-variable "Template.K8s.Namespace" {
-    value "#{Template.ApplicationName.Prefix}-#{Octopus.Environment.Name | ToLower }" {}
-}
-
-variable "Template.KeyVault.GitHub.Token" {
-    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.GitHubToken}" {}
-}
-
-variable "Template.KeyVault.Octopus.Api.Key" {
-    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.OctopusApiKey}" {}
-}
-
-variable "Template.KeyVault.Sumologic.Url" {
-    value "#{Octopus.Action[Azure Key Vault - Retrieve Secrets].Output.SumoLogicUrl}" {}
+variable "Template.Variable.KeyVault.Sumologic.Url" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SumoLogicUrl}" {}
 }

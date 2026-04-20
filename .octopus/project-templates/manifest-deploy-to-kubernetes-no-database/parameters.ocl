@@ -6,6 +6,14 @@ parameter "Template.Target.Tag" {
     label = "Kubernetes Cluster Target Tag"
 }
 
+parameter "Template.Worker.Pool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "The worker pool where work that needs to run outside of the K8s deployment will run."
+    label = "Worker Pool"
+}
+
 parameter "Template.Container" {
     display_settings = {
         Octopus.ControlType = "Package"
@@ -22,32 +30,6 @@ parameter "Template.Git.Repo" {
     label = "Manifest Git Repo"
 }
 
-parameter "Template.Branch.Name" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = "The name of the branch to pull the manifest file and other associated files from."
-    label = "Branch Name"
-
-    value "main" {}
-}
-
-parameter "Template.Worker.Pool" {
-    display_settings = {
-        Octopus.ControlType = "WorkerPool"
-    }
-    help_text = "The worker pool where work that needs to run outside of the K8s deployment will run."
-    label = "Worker Pool"
-}
-
-parameter "Template.ExecutionContainer.Feed" {
-    display_settings = {
-        Octopus.ControlType = "Feed"
-    }
-    help_text = "The container feed to pull execution containers from."
-    label = "Execution Container Feed"
-}
-
 parameter "Template.SBOM.Artifact" {
     display_settings = {
         Octopus.ControlType = "Package"
@@ -56,14 +38,12 @@ parameter "Template.SBOM.Artifact" {
     label = "SBOM Package"
 }
 
-parameter "Template.DependencyVerify.Attestations" {
+parameter "Template.ExecutionContainer.Feed" {
     display_settings = {
-        Octopus.ControlType = "Checkbox"
+        Octopus.ControlType = "Feed"
     }
-    help_text = "Determines if the project should verify the attestations of the SBOM and Container."
-    label = "Verify Attestations"
-
-    value "true" {}
+    help_text = "The container feed to pull execution containers from."
+    label = "Execution Container Feed"
 }
 
 parameter "Template.Azure.Account" {
@@ -112,6 +92,16 @@ parameter "Template.Notification.Team" {
     }
     help_text = "The team in which to send deployment notifications"
     label = "Notification Team"
+}
+
+parameter "Template.DependencyVerify.Attestations" {
+    display_settings = {
+        Octopus.ControlType = "Checkbox"
+    }
+    help_text = "Determines if the project should verify the attestations of the SBOM and Container."
+    label = "Verify Attestations"
+
+    value "true" {}
 }
 
 parameter "Template.Instance.IsAirGapped" {

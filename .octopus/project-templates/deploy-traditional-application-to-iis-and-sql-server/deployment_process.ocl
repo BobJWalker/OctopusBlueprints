@@ -1,0 +1,79 @@
+process_template "key-vault" {
+    name = "Key Vault"
+    process_template_slug = "key-vault-retrieve-secrets"
+    version_mask = "2.X"
+
+    parameter "KeyVault.Template.Vault.Name" {
+        value = "#{ProjectTemplate.KeyVault.Name}"
+    }
+
+    parameter "KeyVault.Template.Secrets.List" {
+        value = "#{ProjectTemplate.KeyVault.Keys.List}"
+    }
+
+    parameter "KeyVault.Template.Worker.Pool" {
+        value = "#{ProjectTemplate.Worker.Pool}"
+    }
+
+    parameter "KeyVault.Template.ExecutionContainer.Feed" {
+        value = "#{ProjectTemplate.ExecutionContainer.Feed}"
+    }
+
+    parameter "KeyVault.Template.Instance.AirGapped" {
+        value = "#{ProjectTemplate.Instance.Airgapped}"
+    }
+}
+
+process_template "deploy-database" {
+    name = "Deploy Database"
+    process_template_slug = "deploy-database"
+    version_mask = "2.X"
+
+    parameter "Template.Database.Package" {
+        value = "ProjectTemplate.Database.Package"
+    }
+
+    parameter "Template.DbUp.Executable" {
+        value = "#{ProjectTemplate.DbUp.Executable}"
+    }
+
+    parameter "Template.Database.ConnectionString" {
+        value = "#{ProjectTemplate.Variable.SQLServer.ConnectionString}"
+    }
+
+    parameter "Template.WorkerPool" {
+        value = "#{ProjectTemplate.Worker.Pool}"
+    }
+
+    parameter "Template.Approval.Environments" {
+        value = "#{ProjectTemplate.Approval.Environment}"
+    }
+}
+
+process_template "deploy-web-app" {
+    name = "Deploy Web App"
+    process_template_slug = "deploy-process-deploy-to-iis"
+    version_mask = "1.X"
+
+    parameter "ProcessTemplate.Target.Tag" {
+        value = "#{ProjectTemplate.TargetTag.IISServer}"
+    }
+
+    parameter "ProcessTemplate.Worker.Pool" {
+        value = "#{ProjectTemplate.Worker.Pool}"
+    }
+
+    parameter "ProcessTemplate.IIS.ApplicationPackage" {
+        value = "ProjectTemplate.Application.Package"
+    }
+}
+
+process_template "notify-team" {
+    name = "Notify Team"
+    process_template_slug = "notification-emails"
+    version_mask = "1.X"
+
+    parameter "Template.EmailTeam" {
+        value = "#{ProjectTemplate.Notification.Team}"
+    }
+}

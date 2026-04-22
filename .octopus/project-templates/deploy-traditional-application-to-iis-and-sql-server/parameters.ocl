@@ -1,0 +1,114 @@
+parameter "ProjectTemplate.TargetTag.IISServer" {
+    display_settings = {
+        Octopus.ControlType = "TargetTags"
+    }
+    help_text = "The target tag for the IIS Server(s) to deploy the application to."
+    label = "Target IIS Server"
+}
+
+parameter "ProjectTemplate.Worker.Pool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "The worker pool that will be used to execute the steps to pull secrets from the key vault, deploy database changes, verify the deployment, and update the load balancer."
+    label = "Worker Pool"
+}
+
+parameter "ProjectTemplate.Application.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The NuGet or Zip file of the web application to deploy to IIS"
+    label = "Web Application Package"
+}
+
+parameter "ProjectTemplate.Database.Name" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The database name for the application."
+    label = "Database Name"
+}
+
+parameter "ProjectTemplate.Database.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The NuGet or Zip file containing the database migration scripts"
+    label = "Database Package"
+}
+
+parameter "ProjectTemplate.DbUp.Executable" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The executable of your self-contained dotnet console application to run. Example: `Trident.Database.DbUp`"
+    label = "DBUp Executable"
+}
+
+parameter "ProjectTemplate.Approval.Environment" {
+    display_settings = {
+        Octopus.ControlType = "Environments"
+    }
+    help_text = "The environment where any database verification / approval should take place."
+    label = "Approval Environment"
+}
+
+parameter "ProjectTemplate.Notification.Team" {
+    display_settings = {
+        Octopus.ControlType = "Teams"
+    }
+    help_text = "The team to be notified when the deployment is complete"
+    label = "Notification Team"
+}
+
+parameter "ProjectTemplate.KeyVault.Account" {
+    display_settings = {
+        Octopus.ControlType = "AzureAccount"
+    }
+    help_text = "The Azure Account who has permissions to pull from the key vault"
+    label = "Key Vault Account"
+}
+
+parameter "ProjectTemplate.KeyVault.Name" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The name of the key vault to pull the keys from"
+    label = "Key Vault Name"
+}
+
+parameter "ProjectTemplate.KeyVault.Keys.List" {
+    display_settings = {
+        Octopus.ControlType = "MultiLineText"
+    }
+    help_text = <<-EOT
+            The list of keys to pull from the key vault.
+            
+            Format: `Key Name` | `Output Variable Name` | `Default Value`
+            
+            Can provide multiple keys by a new line separation.  
+            EOT
+    label = "Key Vault Keys"
+
+    value {
+        value = <<-EOT
+                azure-sql-server | SQLServerName | 172.29.120.169
+                azure-sql-password | SQLUserPassword | Octopus_Deploy
+                azure-sql-username | SQLUserName | Password01!
+                octopus-api-key | OctopusApiKey | blah
+                github-token | GitHubToken | blah
+                sumo-logic-url | SumoLogicUrl | blah
+                EOT
+    }
+}
+
+parameter "ProjectTemplate.Instance.Airgapped" {
+    display_settings = {
+        Octopus.ControlType = "Checkbox"
+    }
+    help_text = "Indicates this instance is running in an airgapped environment and shouldn't connect to external items like vaults."
+    label = "Airgapped Instance"
+
+    value "false" {}
+}

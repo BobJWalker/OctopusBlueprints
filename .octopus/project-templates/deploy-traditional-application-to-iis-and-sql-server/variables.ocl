@@ -1,25 +1,25 @@
-variable "ProjectTemplate.Variable.KeyVault.SQLServer.Password" {
-    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SQLUserName}" {}
-}
-
-variable "ProjectTemplate.Variable.KeyVault.SQLServer.Username" {
-    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SQLUserName}" {}
-}
-
-variable "ProjectTemplate.Variable.KeyVault.SQLServer.Name" {
-    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SQLServerName}" {}
-}
-
-variable "ProjectTemplate.Variable.KeyVault.Sumologic.Url" {
-    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SumoLogicUrl}" {}
+variable "ProjectTemplate.Variable.KeyVault.GitHub.Token" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.GitHubToken}" {}
 }
 
 variable "ProjectTemplate.Variable.KeyVault.Octopus.Api.Key" {
     value "#{Octopus.Action[Key Vault-Set Output Variables].Output.OctopusApiKey}" {}
 }
 
-variable "ProjectTemplate.Variable.KeyVault.GitHub.Token" {
-    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.GitHubToken}" {}
+variable "ProjectTemplate.Variable.KeyVault.SQLServer.Name" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SQLServerName}" {}
+}
+
+variable "ProjectTemplate.Variable.KeyVault.SQLServer.Password" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SQLUserPassword}" {}
+}
+
+variable "ProjectTemplate.Variable.KeyVault.SQLServer.Username" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SQLUserName}" {}
+}
+
+variable "ProjectTemplate.Variable.KeyVault.Sumologic.Url" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SumoLogicUrl}" {}
 }
 
 variable "ProjectTemplate.Variable.SQLServer.ConnectionString" {

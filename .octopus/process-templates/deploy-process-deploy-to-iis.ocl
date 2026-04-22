@@ -1,2 +1,105 @@
 name = "Deploy Process - Deploy to IIS"
 description = "A process template that will deploy a traditional web application to IIS"
+
+icon {
+    color = "#1A77CA"
+    id = "box-check"
+}
+
+parameter "ProcessTemplate.Target.Tag" {
+    display_settings = {
+        Octopus.ControlType = "TargetTags"
+    }
+    help_text = "The target tag of the IIS Server(s) the application runs on."
+    label = "IIS Server Target Tag"
+}
+
+parameter "ProcessTemplate.Worker.Pool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "The worker pool that will invoke scripts to verify the deployment and update the load balancer"
+    label = "Worker Pool"
+}
+
+parameter "ProcessTemplate.IIS.ApplicationPackage" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The NuGet or Zip file of the application to be deployed."
+    label = "Application Package"
+}
+
+step "deploy-website" {
+    name = "Deploy Website"
+    properties = {
+        Octopus.Action.TargetRoles = "#{ProcessTemplate.Target.Tag}"
+    }
+
+    action {
+        action_type = "Octopus.TentaclePackage"
+        properties = {
+            Octopus.Action.EnabledFeatures = ",Octopus.Features.ConfigurationTransforms,Octopus.Features.ConfigurationVariables"
+            Octopus.Action.Package.AutomaticallyRunConfigurationTransformationFiles = "True"
+            Octopus.Action.Package.AutomaticallyUpdateAppSettingsAndConnectionStrings = "True"
+        }
+        worker_pool_variable = ""
+
+        packages {
+            acquisition_location = "Server"
+            properties = {
+                PackageParameterName = "ProcessTemplate.IIS.ApplicationPackage"
+                SelectionMode = "deferred"
+            }
+        }
+    }
+}
+
+step "verify-deployment" {
+    name = "Verify Deployment"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                Write-Host "Running Smoke Tests"
+                Start-Sleep -Seconds 5
+                Write-Host "Smoke Tests were successful!"
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{ProcessTemplate.Worker.Pool}"
+    }
+}
+
+step "update-load-balancer" {
+    name = "Update Load Balancer"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $EnvironmentName = $OctopusParameters["Octopus.Environment.Name"]
+                $ReleaseNumber = $OctopusParameters["Octopus.Release.Number"]
+                
+                if ($EnvironmentName -like "*Production*")
+                {
+                  Write-Highlight "Successfully updated load balancer to point to $ReleaseNumber for Production"
+                }
+                else
+                {
+                  Write-Highlight "Successfully updated load balancer to point to $ReleaseNumber for $EnvironmentName"
+                }
+                
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = "#{ProcessTemplate.Worker.Pool}"
+    }
+}

@@ -1,0 +1,27 @@
+variable "ProjectTemplate.Variable.KeyVault.SQLServer.Password" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SQLUserName}" {}
+}
+
+variable "ProjectTemplate.Variable.KeyVault.SQLServer.Username" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SQLUserName}" {}
+}
+
+variable "ProjectTemplate.Variable.KeyVault.SQLServer.Name" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SQLServerName}" {}
+}
+
+variable "ProjectTemplate.Variable.KeyVault.Sumologic.Url" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.SumoLogicUrl}" {}
+}
+
+variable "ProjectTemplate.Variable.KeyVault.Octopus.Api.Key" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.OctopusApiKey}" {}
+}
+
+variable "ProjectTemplate.Variable.KeyVault.GitHub.Token" {
+    value "#{Octopus.Action[Key Vault-Set Output Variables].Output.GitHubToken}" {}
+}
+
+variable "ProjectTemplate.Variable.SQLServer.ConnectionString" {
+    value "Server=tcp:#{ProjectTemplate.Variable.KeyVault.SQLServer.Name},1433;Database=#{ProjectTemplate.Database.Name};User Id=#{ProjectTemplate.Variable.KeyVault.SQLServer.Username};Password=#{ProjectTemplate.Variable.KeyVault.SQLServer.Password};trustServerCertificate=true;Persist Security Info=False;MultipleActiveResultSets=False;Encrypt=True;" {}
+}

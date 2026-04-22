@@ -1,0 +1,14 @@
+name = "Deploy Traditional Application to IIS and SQL Server"
+description = <<-EOT
+        A project template that will:
+        
+        - Pull secrets from the key vault
+        - Deploy the database
+        - Deploy a traditional web application to IIS
+        - Send out a notification to desired people
+        EOT
+
+icon {
+    color = "#757575"
+    id = "layer-group"
+}

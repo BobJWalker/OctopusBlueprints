@@ -14,6 +14,14 @@ parameter "ProjectTemplate.Worker.Pool" {
     label = "Worker Pool"
 }
 
+parameter "ProjectTemplate.ExecutionContainer.Feed" {
+    display_settings = {
+        Octopus.ControlType = "Feed"
+    }
+    help_text = "The execution container feed to pull execution containers from to perform various tasks"
+    label = "Execution Container Feed"
+}
+
 parameter "ProjectTemplate.Application.Package" {
     display_settings = {
         Octopus.ControlType = "Package"

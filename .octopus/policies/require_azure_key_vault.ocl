@@ -1,7 +1,7 @@
-name = "Require Azure Key Vault"
-description = "Verifies the step template that pulls secrets from Azure Key Vault instead of from Octopus."
+name = "Require Key Vault"
+description = "Verifies the step template that pulls secrets from the Key Vault instead of from Octopus."
 violation_action = "block"
-violation_reason = "Azure Key Vault is required for all deployments and runbook runs."
+violation_reason = "Key Vault Process Template is required for all deployments and runbook runs."
 
 conditions {
     rego = <<-EOT
@@ -11,18 +11,18 @@ conditions {
             
                 result := {"allowed": true} if {
                     some step in input.Steps
-                    step.Slug == "azure-key-vault-retrieve-secrets"
-                    not azure_key_vault_skipped
+                    step.Source.SlugOrId == "key-vault-retrieve-secrets"
+                    not key_vault_skipped
                 }
             
-                result := {"allowed": false, "Reason": "Azure Key Vault is required and cannot be skipped for a deployment or runbook run to any environment."} if {
-                    azure_key_vault_skipped
+                result := {"allowed": false, "Reason": "Key Vault Process Template is required and cannot be skipped for a deployment or runbook run to any environment."} if {
+                    key_vault_skipped
                 }
             
-                azure_key_vault_skipped if {
+                key_vault_skipped if {
                     some step in input.Steps
                     step.Id in input.SkippedSteps
-                    step.Slug == "azure-key-vault-retrieve-secrets"
+                    step.Source.SlugOrId == "key-vault-retrieve-secrets"
                 }
             EOT
 }

@@ -295,13 +295,13 @@ step "deploy-mailpit" {
                   namespace: mailpit
                 spec:
                   ports:
-                  - nodePort: #{Template.MailPit.SmtpPort}
-                    port: #{Template.MailPit.SmtpPort}
+                  - nodePort: #{Template.MailPit.SMTP.Port}
+                    port: #{Template.MailPit.SMTP.Port}
                     protocol: TCP
                     targetPort: 1025
                     name: smtp
-                  - nodePort: #{Template.MailPit.GuiPort}
-                    port: #{Template.MailPit.GuiPort}
+                  - nodePort: #{Template.MailPit.Gui.Port}
+                    port: #{Template.MailPit.Gui.Port}
                     protocol: TCP
                     targetPort: 8025
                     name: gui

@@ -235,6 +235,7 @@ step "deploy-local-registry" {
 
         packages "Template.Registry.Package" {
             acquisition_location = "NotAcquired"
+            feed = "octopus-server-built-in"
             package_id = ""
             properties = {
                 Extract = "false"
@@ -315,6 +316,7 @@ step "deploy-mailpit" {
 
         packages "Template.MailPit.Package" {
             acquisition_location = "NotAcquired"
+            feed = "octopus-server-built-in"
             package_id = ""
             properties = {
                 Extract = "false"
@@ -431,7 +433,10 @@ step "install-argo-via-helm" {
                   {
                     "Type": "KeyValues",
                     "Value": {
-                      "server.insecure": "true"
+                      "server.insecure": "true",
+                      "server.service.type": "NodePort",
+                      "server.service.nodePortHttp": "30080",
+                      "server.service.nodePortHttps": "30443"
                     }
                   }
                 ]
@@ -443,6 +448,8 @@ step "install-argo-via-helm" {
 
         packages {
             acquisition_location = "Server"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 PackageParameterName = "Template.Argo.Package"
                 SelectionMode = "deferred"
@@ -491,6 +498,8 @@ step "add-octopus-service-account-to-argo" {
                     p, octopus, applications, sync, *, allow
                     p, octopus, clusters, get, *, allow
                     p, octopus, logs, get, */*, allow
+                
+                
                 EOT
             Octopus.Action.Script.ScriptSource = "Inline"
         }

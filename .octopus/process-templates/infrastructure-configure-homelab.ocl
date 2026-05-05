@@ -1,5 +1,10 @@
-name = "Infrastructure - Configure HomeLab"
+name = "Infrastructure - Configure K8s Cluster"
 description = "A process template that will configure all the necessary items for a home lab."
+
+icon {
+    color = "#757575"
+    id = "server"
+}
 
 parameter "Template.K8s.Target" {
     display_settings = {
@@ -7,6 +12,32 @@ parameter "Template.K8s.Target" {
     }
     help_text = "The target tag of the Kubernetes cluster you want to run this on."
     label = "Kubernetes Target Tag"
+}
+
+parameter "Template.K8s.WorkerPool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "Where any steps that run outside of Kubernetes target will run"
+    label = "Kubernetes Worker Pool"
+}
+
+parameter "Template.Registry.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The container for Registry coming from DockerHub"
+    label = "Registry Docker Container"
+}
+
+parameter "Template.Registry.Port" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The port to connect to the Registry - Defaults to `32000`"
+    label = "Local Registry Port"
+
+    value "32000" {}
 }
 
 parameter "Template.Traefik.Package" {
@@ -24,7 +55,7 @@ parameter "Template.SSL.EntryPoint" {
     help_text = "The entry point for the K8s gateway"
     label = "Gateway SSL Entrypoint"
 
-    value "443" {}
+    value "8444" {}
 }
 
 parameter "Template.Web.EntryPoint" {
@@ -34,7 +65,23 @@ parameter "Template.Web.EntryPoint" {
     help_text = "The http entry point for the K8s gateway"
     label = "Http Entry Point"
 
-    value "443" {}
+    value "8081" {}
+}
+
+parameter "Template.Argo.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The Argo Helm Chart coming from `https://argoproj.github.io/argo-helm`"
+    label = "Argo Package"
+}
+
+parameter "Template.MailPit.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The container for MailPit coming from DockerHub"
+    label = "MailPit Docker Container"
 }
 
 parameter "Template.MailPit.SMTP.Port" {
@@ -55,16 +102,6 @@ parameter "Template.MailPit.Gui.Port" {
     label = "Mailpit GUI port"
 
     value "32025" {}
-}
-
-parameter "Template.Registry.Port" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = "The Nodeport you want to use for the local registry service"
-    label = "Local Registry Port"
-
-    value "32000" {}
 }
 
 step "create-namespaces" {
@@ -107,77 +144,8 @@ step "create-namespaces" {
     }
 }
 
-step "deploy-mailpit" {
-    name = "Deploy Mailpit"
-    properties = {
-        Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
-    }
-
-    action {
-        action_type = "Octopus.KubernetesDeployRawYaml"
-        properties = {
-            Octopus.Action.Kubernetes.DeploymentTimeout = "180"
-            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
-            Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
-            Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
-            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
-                apiVersion: apps/v1
-                kind: Deployment
-                metadata:
-                  name: mailpit
-                  labels:
-                    app: mailpit
-                spec:
-                  replicas: 1
-                  selector:
-                    matchLabels:
-                      app: mailpit
-                  template:
-                    metadata:
-                      labels:
-                        app: mailpit
-                    spec:
-                      containers:
-                      - name: mailpit
-                        image: axllent/mailpit:latest
-                        ports:
-                        - containerPort: 1025
-                          name: smtp
-                        - containerPort: 8025
-                          name: http
-                ---
-                apiVersion: v1
-                kind: Service
-                metadata:
-                  labels:
-                    app: mailpit-nodeport
-                  name: mailpit-nodeport
-                  namespace: mailpit
-                spec:
-                  ports:
-                  - nodePort: #{Template.MailPit.SMTP.Port}
-                    port: #{Template.MailPit.SMTP.Port}
-                    protocol: TCP
-                    targetPort: 1025
-                    name: smtp
-                  - nodePort: #{Template.MailPit.Gui.Port}
-                    port: #{Template.MailPit.Gui.Port}
-                    protocol: TCP
-                    targetPort: 8025
-                    name: gui
-                  selector:
-                    app: mailpit
-                  type: NodePort
-                EOT
-            Octopus.Action.KubernetesContainers.Namespace = "mailpit"
-            Octopus.Action.Script.ScriptSource = "Inline"
-        }
-        worker_pool_variable = ""
-    }
-}
-
 step "deploy-local-registry" {
-    name = "Deploy Local Registry"
+    name = "Deploy Registry"
     properties = {
         Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
     }
@@ -232,7 +200,7 @@ step "deploy-local-registry" {
                     spec:
                       containers:
                         - name: registry
-                          image: registry:2
+                          image: #{Octopus.Action.Package[Template.Registry.Package].PackageId}/#{Octopus.Action.Package[Template.Registry.Package].PackageVersion}
                           ports:
                             - containerPort: 5000
                           volumeMounts:
@@ -263,7 +231,98 @@ step "deploy-local-registry" {
             Octopus.Action.KubernetesContainers.Namespace = "local-registry"
             Octopus.Action.Script.ScriptSource = "Inline"
         }
-        worker_pool_variable = ""
+        worker_pool_variable = "#{Template.K8s.WorkerPool}"
+
+        packages "Template.Registry.Package" {
+            acquisition_location = "NotAcquired"
+            package_id = ""
+            properties = {
+                Extract = "false"
+                PackageParameterName = "Template.Registry.Package"
+                Purpose = "DockerImageReference"
+                SelectionMode = "deferred"
+            }
+        }
+    }
+}
+
+step "deploy-mailpit" {
+    name = "Deploy Mailpit"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesDeployRawYaml"
+        properties = {
+            Octopus.Action.Kubernetes.DeploymentTimeout = "180"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: mailpit
+                  labels:
+                    app: mailpit
+                spec:
+                  replicas: 1
+                  selector:
+                    matchLabels:
+                      app: mailpit
+                  template:
+                    metadata:
+                      labels:
+                        app: mailpit
+                    spec:
+                      containers:
+                      - name: mailpit
+                        image: #{Octopus.Action.Package[Template.MailPit.Package].PackageId}:#{Octopus.Action.Package[Template.MailPit.Package].PackageVersion}
+                        ports:
+                        - containerPort: 1025
+                          name: smtp
+                        - containerPort: 8025
+                          name: http
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  labels:
+                    app: mailpit-nodeport
+                  name: mailpit-nodeport
+                  namespace: mailpit
+                spec:
+                  ports:
+                  - nodePort: #{Template.MailPit.SmtpPort}
+                    port: #{Template.MailPit.SmtpPort}
+                    protocol: TCP
+                    targetPort: 1025
+                    name: smtp
+                  - nodePort: #{Template.MailPit.GuiPort}
+                    port: #{Template.MailPit.GuiPort}
+                    protocol: TCP
+                    targetPort: 8025
+                    name: gui
+                  selector:
+                    app: mailpit
+                  type: NodePort
+                EOT
+            Octopus.Action.KubernetesContainers.Namespace = "mailpit"
+            Octopus.Action.Script.ScriptSource = "Inline"
+        }
+        worker_pool_variable = "#{Template.K8s.WorkerPool}"
+
+        packages "Template.MailPit.Package" {
+            acquisition_location = "NotAcquired"
+            package_id = ""
+            properties = {
+                Extract = "false"
+                PackageParameterName = "Template.MailPit.Package"
+                Purpose = "DockerImageReference"
+                SelectionMode = "deferred"
+            }
+        }
     }
 }
 
@@ -355,54 +414,41 @@ step "configure-traefik-gateway" {
     }
 }
 
-step "deploy-argo-cd" {
-    name = "Deploy Argo CD"
+step "install-argo-via-helm" {
+    name = "Install Argo Via Helm"
     properties = {
         Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
     }
 
     action {
-        action_type = "Octopus.KubernetesRunScript"
+        action_type = "Octopus.HelmChartUpgrade"
         properties = {
-            Octopus.Action.KubernetesContainers.Namespace = "argocd"
-            Octopus.Action.Script.ScriptBody = <<-EOT
-                try
-                {
-                  kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side --force-conflicts
-                }
-                catch
-                {
-                  Write-Host "There was a problem running kubectl account"
-                }
-                
-                exit 0
+            Octopus.Action.Helm.Namespace = "argocd"
+            Octopus.Action.Helm.ReleaseName = "argocd"
+            Octopus.Action.Helm.ResetValues = "True"
+            Octopus.Action.Helm.TemplateValuesSources = <<-EOT
+                [
+                  {
+                    "Type": "KeyValues",
+                    "Value": {
+                      "server.insecure": "true"
+                    }
+                  }
+                ]
                 EOT
-            Octopus.Action.Script.ScriptSource = "Inline"
-            Octopus.Action.Script.Syntax = "PowerShell"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Script.ScriptSource = "Package"
         }
-        worker_pool_variable = ""
-    }
-}
+        worker_pool_variable = "#{Template.K8s.WorkerPool}"
 
-step "configure-argo-cd-for-local-running" {
-    name = "Configure Argo CD for Local Running"
-    properties = {
-        Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
-    }
-
-    action {
-        action_type = "Octopus.KubernetesRunScript"
-        properties = {
-            Octopus.Action.KubernetesContainers.Namespace = "argocd"
-            Octopus.Action.Script.ScriptBody = <<-EOT
-                kubectl -n argocd patch deployment argocd-server \
-                  --type='json' \
-                  -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value":"--insecure"}]'
-                EOT
-            Octopus.Action.Script.ScriptSource = "Inline"
-            Octopus.Action.Script.Syntax = "Bash"
+        packages {
+            acquisition_location = "Server"
+            properties = {
+                PackageParameterName = "Template.Argo.Package"
+                SelectionMode = "deferred"
+                ValuesFilePath = ""
+            }
         }
-        worker_pool_variable = ""
     }
 }
 

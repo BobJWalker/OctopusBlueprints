@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: production-taka
+  namespace: argocd
+  annotations:
+    argo.octopus.com/environment: "production"
+    argo.octopus.com/project: "taka"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/BobJWalker/TAKA.git
+    path: k8s/overlays/prod
+    targetRevision: HEAD
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production-taka
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

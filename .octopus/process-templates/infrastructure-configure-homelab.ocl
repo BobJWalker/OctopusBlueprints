@@ -200,7 +200,7 @@ step "deploy-local-registry" {
                     spec:
                       containers:
                         - name: registry
-                          image: #{Octopus.Action.Package[Template.Registry.Package].PackageId}/#{Octopus.Action.Package[Template.Registry.Package].PackageVersion}
+                          image: #{Octopus.Action.Package[Template.Registry.Package].PackageId}:#{Octopus.Action.Package[Template.Registry.Package].PackageVersion}
                           ports:
                             - containerPort: 5000
                           volumeMounts:

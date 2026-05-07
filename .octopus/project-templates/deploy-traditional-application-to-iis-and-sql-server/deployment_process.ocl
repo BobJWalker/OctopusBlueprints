@@ -77,3 +77,19 @@ process_template "notify-team" {
         value = "#{ProjectTemplate.Notification.Team}"
     }
 }
+
+step "testing-script" {
+    name = "Testing Script"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptBody = "Write-Host \"I'm testing a script\""
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+            OctopusUseBundledTooling = "False"
+        }
+        worker_pool_variable = ""
+    }
+}

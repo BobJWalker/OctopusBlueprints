@@ -26,7 +26,7 @@ parameter "ProjectTemplate.Application.Package" {
     display_settings = {
         Octopus.ControlType = "Package"
     }
-    help_text = "The NuGet or Zip file of the web application to deploy to IIS"
+    help_text = "The NuGet or Zip file of the web application to deploy to IIS Server"
     label = "Web Application Package"
 }
 

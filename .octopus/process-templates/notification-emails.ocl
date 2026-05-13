@@ -25,6 +25,7 @@ parameter "Template.ManualIntervention" {
 }
 
 step "send-email-notification" {
+    condition = "Always"
     name = "Send Email Notification"
 
     action {

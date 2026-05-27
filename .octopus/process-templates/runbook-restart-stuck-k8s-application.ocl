@@ -1,2 +1,47 @@
 name = "Runbook - Restart Stuck K8s Application"
 description = "A process template that will restart a stuck K8s application as a last resort"
+
+parameter "Template.Target.Tags" {
+    display_settings = {
+        Octopus.ControlType = "TargetTags"
+    }
+    help_text = "The tag of the application host to restart the application"
+    label = "Application Host Tag"
+}
+
+parameter "Template.Namespace.Name" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The application namespace where the application resides."
+    label = "Application Namespace"
+}
+
+step "restart-application" {
+    name = "Restart Application"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.Target.Tags}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesRunScript"
+        notes = <<-EOT
+                **Always Runs**
+                
+                Restarts the application using Kubectl
+                EOT
+        properties = {
+            Octopus.Action.KubernetesContainers.Namespace = "#{Template.Namespace.Name}"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                $namespaceName = $OctopusParameters["Template.Namespace.Name"]
+                
+                Write-Host "Restarting all apps in $namespaceName"
+                kubectl rollout restart deployment -n $namespaceName
+                Write-Host "Restart Complete"
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+        }
+        worker_pool_variable = ""
+    }
+}

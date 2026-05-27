@@ -1,0 +1,2 @@
+name = "Runbook - Restart Stuck K8s Application"
+description = "A process template that will restart a stuck K8s application as a last resort"

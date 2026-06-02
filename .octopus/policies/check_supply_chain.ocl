@@ -36,8 +36,7 @@ scope {
             default evaluate := false
             
             evaluate := true if {
-                input.ProjectGroup.Slug == "kubernetes"
-                input.Environment.Slug in ["test", "staging", "production"]
+                input.ProjectGroup.Slug == "kubernetes"    
                 not input.Runbook           
             }
             

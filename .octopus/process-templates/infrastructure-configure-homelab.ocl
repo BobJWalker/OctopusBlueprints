@@ -506,3 +506,42 @@ step "add-octopus-service-account-to-argo" {
         worker_pool_variable = ""
     }
 }
+
+step "add-nodeport-to-access-argo-cd" {
+    name = "Add NodePort to Access Argo CD"
+    properties = {
+        Octopus.Action.TargetRoles = "#{Template.K8s.Target}"
+    }
+
+    action {
+        action_type = "Octopus.KubernetesDeployRawYaml"
+        properties = {
+            Octopus.Action.Kubernetes.DeploymentTimeout = "180"
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.Enabled = "True"
+            Octopus.Action.Kubernetes.ServerSideApply.ForceConflicts = "True"
+            Octopus.Action.KubernetesContainers.CustomResourceYaml = <<-EOT
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  labels:
+                    app: argocd-nodeport
+                  name: argocd-nodeport
+                  namespace: argocd
+                spec:
+                  ports:  
+                  - nodePort: 32069
+                    port: 32069
+                    protocol: TCP
+                    targetPort: 8080
+                    name: gui
+                  selector:
+                    app.kubernetes.io/name: argocd-server
+                  type: NodePort
+                EOT
+            Octopus.Action.KubernetesContainers.Namespace = "argocd"
+            Octopus.Action.Script.ScriptSource = "Inline"
+        }
+        worker_pool_variable = "#{Template.K8s.WorkerPool}"
+    }
+}

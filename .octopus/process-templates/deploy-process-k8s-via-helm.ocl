@@ -1,2 +1,101 @@
 name = "Deploy Process - K8s via Helm"
 description = "Process template that will deploy an application to Kubernetes via Helm"
+
+icon {
+    color = "#1A77CA"
+    id = "hard-hat"
+}
+
+parameter "K8sTemplate.Target.tag" {
+    display_settings = {
+        Octopus.ControlType = "TargetTags"
+    }
+    help_text = "The target tag of the Kubernetes cluster you wish to deploy to."
+    label = "Kubernetes cluster target tag"
+}
+
+parameter "K8sTemplate.Git.Repo" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The git repository where the helm chart is stored"
+    label = "Helm Chart Git Repo"
+}
+
+parameter "K8sTemplate.Namespace" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The namespace to deploy the helm chart and containers to"
+    label = "Kubernetes Namespace"
+}
+
+parameter "K8sTemplate.Helm.AdditionalArguments" {
+    display_settings = {
+        Octopus.ControlType = "MultiLineText"
+    }
+    help_text = "Additional parameters you want to send to helm"
+    label = "Additional Helm Arguments"
+}
+
+parameter "K8sTemplate.Container" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The container to deploy.  Needed so to pull the correct version number to send to helm"
+    label = "Container to Deploy"
+}
+
+step "deploy-application-helm-chart" {
+    name = "Deploy application helm chart"
+    properties = {
+        Octopus.Action.TargetRoles = "#{K8sTemplate.Target.tag}"
+    }
+
+    action {
+        action_type = "Octopus.HelmChartUpgrade"
+        properties = {
+            Octopus.Action.GitRepository.Source = "External"
+            Octopus.Action.Helm.AdditionalArgs = "#{K8sTemplate.Helm.AdditionalArguments}"
+            Octopus.Action.Helm.ChartDirectory = "k8s/chart"
+            Octopus.Action.Helm.Namespace = "#{K8sTemplate.Namespace}"
+            Octopus.Action.Helm.ReleaseName = "#{K8sTemplate.Namespace}"
+            Octopus.Action.Helm.ResetValues = "True"
+            Octopus.Action.Helm.TemplateValuesSources = <<-EOT
+                [
+                  {
+                    "Type": "KeyValues",
+                    "Value": {
+                      "standard.environmentName": "#{Octopus.Environment.Name}",
+                      "standard.secrets.openFeatureClientId": "#{Octopus.FeatureToggles.ClientIdentifier}",
+                      "standard.networking.hostName": "#{K8sTemplate.Namespace}.bobjwalker.local",
+                      "standard.image.tag": "#{Octopus.Action.Package[K8sTemplate.Container].PackageVersion}"
+                    }
+                  }
+                ]
+                EOT
+            Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
+            Octopus.Action.Script.ScriptSource = "GitRepository"
+        }
+        worker_pool_variable = ""
+
+        git_dependencies {
+            default_branch = "main"
+            git_credential_id = "GitCredentialIds-1"
+            git_credential_type = "Library"
+            repository_uri = "#{K8sTemplate.Git.Repo}"
+        }
+
+        packages "K8sTemplate.Container" {
+            acquisition_location = "NotAcquired"
+            package_id = ""
+            properties = {
+                Extract = "false"
+                PackageParameterName = "K8sTemplate.Container"
+                Purpose = "DockerImageReference"
+                SelectionMode = "deferred"
+                ValuesFilePath = ""
+            }
+        }
+    }
+}

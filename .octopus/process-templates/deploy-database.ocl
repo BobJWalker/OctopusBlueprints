@@ -30,16 +30,6 @@ parameter "Template.Database.ConnectionString" {
     label = "Database Connection String"
 }
 
-parameter "Template.Database.ChangeReportDirectory" {
-    display_settings = {
-        Octopus.ControlType = "SingleLineText"
-    }
-    help_text = "**Required:** The directory where the delta report will be stored after creation."
-    label = "Delta Report Directory"
-
-    value "../../#{Octopus.Project.Name}/#{Octopus.Release.Number}/#{Octopus.Environment.Name}" {}
-}
-
 parameter "Template.WorkerPool" {
     display_settings = {
         Octopus.ControlType = "WorkerPool"
@@ -71,9 +61,10 @@ step "build-delta-report" {
             Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 $connectionString = $OctopusParameters["Template.Database.ConnectionString"]
-                $changeReportDirectory = $OctopusParameters["Template.Database.ChangeReportDirectory"]
                 $projectExe = $OctopusParameters["Template.DbUp.Executable"]
                 $environmentName = $OctopusParameters["Octopus.Environment.Name"]
+                $projectName = $OctopusParameters["Octopus.Project.Name"]
+                $releaseNumber = $OctopusParameters["Octopus.Release.Number"]
                 $extractedPath = $OctopusParameters["Octopus.Action.Package[Template.Database.Package].ExtractedPath"]
                 $stepName = $OctopusParameters["Octopus.Action.StepName"]
                 
@@ -81,7 +72,9 @@ step "build-delta-report" {
                                 
                 Write-Host "Setting the current location to $extractedPath"
                 Set-Location $extractedPath
-                                
+                
+                $changeReportDirectory = "../../$projectName/$releaseNumber/$environmentName" 
+                Write-Host "The change report directory is $changeReportDirectory"
                 Write-Host "Doing a what-if migration, generating a change report at $changeReportDirectory"
                                 
                 if ((test-path $changeReportDirectory) -eq $false){

@@ -9,7 +9,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/BobJWalker/TAKA.git
+    repoURL: https://github.com/BobJWalker/Trident.git
     path: k8s/overlays/test
     targetRevision: HEAD
   destination:

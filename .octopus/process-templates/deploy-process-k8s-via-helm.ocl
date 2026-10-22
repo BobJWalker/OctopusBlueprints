@@ -35,6 +35,7 @@ parameter "K8sTemplate.Helm.AdditionalArguments" {
         Octopus.ControlType = "MultiLineText"
     }
     help_text = "Additional parameters you want to send to helm"
+    is_optional = true
     label = "Additional Helm Arguments"
 }
 
@@ -44,6 +45,34 @@ parameter "K8sTemplate.Container" {
     }
     help_text = "The container to deploy.  Needed so to pull the correct version number to send to helm"
     label = "Container to Deploy"
+}
+
+parameter "K8sTemplate.SumoLogicUrl" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The URL so the application can log to SumoLogic"
+    label = "Sumo Logic URL"
+
+    value "blah" {}
+}
+
+parameter "K8sTemplate.ConnectionString" {
+    display_settings = {
+        Octopus.ControlType = "SingleLineText"
+    }
+    help_text = "The connection string to use if the application connects to a database"
+    label = "Database Connection String"
+
+    value "blah" {}
+}
+
+parameter "K8sTemplate.Workerpool" {
+    display_settings = {
+        Octopus.ControlType = "WorkerPool"
+    }
+    help_text = "The worker pool to run verification and post deployment scripts on"
+    label = "Worker Pool"
 }
 
 step "deploy-application-helm-chart" {
@@ -69,7 +98,9 @@ step "deploy-application-helm-chart" {
                       "standard.environmentName": "#{Octopus.Environment.Name}",
                       "standard.secrets.openFeatureClientId": "#{Octopus.FeatureToggles.ClientIdentifier}",
                       "standard.networking.hostName": "#{K8sTemplate.Namespace}.bobjwalker.local",
-                      "standard.image.tag": "#{Octopus.Action.Package[K8sTemplate.Container].PackageVersion}"
+                      "standard.image.tag": "#{Octopus.Action.Package[K8sTemplate.Container].PackageVersion}",
+                      "standard.secrets.connectionString": "#{K8sTemplate.ConnectionString}",
+                      "standard.secrets.sumologicUrl": "#{K8sTemplate.SumoLogicUrl}"
                     }
                   }
                 ]
@@ -88,6 +119,7 @@ step "deploy-application-helm-chart" {
 
         packages "K8sTemplate.Container" {
             acquisition_location = "NotAcquired"
+            feed = "octopus-server-built-in"
             package_id = ""
             properties = {
                 Extract = "false"
@@ -97,5 +129,28 @@ step "deploy-application-helm-chart" {
                 ValuesFilePath = ""
             }
         }
+    }
+}
+
+step "post-deployment-verification" {
+    name = "Post Deployment Verification"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                Start-Sleep -Seconds 5
+                Write-Highlight "Application Successfully Verified!"
+                
+                Write-Host "Setting the application URL for ephemeral environments"
+                $applicationNameSpace = $OctopusParameters["K8sTemplate.Namespace"]
+                $applicationUrl = "https://$applicationNameSpace.bobjwalker.local"
+                Set-EnvironmentUrl "App" "$applicationUrl"
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "PowerShell"
+        }
+        worker_pool_variable = "#{K8sTemplate.Workerpool}"
     }
 }

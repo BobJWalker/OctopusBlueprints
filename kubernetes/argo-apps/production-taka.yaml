@@ -14,7 +14,7 @@ spec:
     targetRevision: HEAD
   destination:
     server: https://kubernetes.default.svc
-    namespace: production-taka
+    namespace: taka-production
   syncPolicy:
     syncOptions:
       - CreateNamespace=true

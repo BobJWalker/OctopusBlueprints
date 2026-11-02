@@ -40,13 +40,6 @@ resource "octopusdeploy_variable" "standards_formatted_branch_name" {
   value    = "#{if Octopus.Runbook.Id}#{Octopus.RunbookRun.Git.BranchName | Replace \"/\" \"-\" | ToLower | Replace \"refs-heads-\" \"\" | Replace \"feature\" \"\" | Replace \"hotfix\" \"\"}#{else}#{Octopus.Release.Git.BranchName | Replace \"/\" \"-\" | ToLower | Replace \"refs-heads-\" \"\" | Replace \"feature\" \"\" | Replace \"hotfix\" \"\" }#{/if}"
 }
 
-resource "octopusdeploy_variable" "standards_database_change_report_path" {
-  owner_id = octopusdeploy_library_variable_set.standards.id
-  name     = "Standards.Database.ChangeReport.Path"
-  type     = "String"
-  value    = "../../#{Octopus.Project.Name}/#{Octopus.Release.Number}/#{Octopus.Environment.Name}"
-}
-
 resource "octopusdeploy_variable" "standards_application_name_prefix" {
   owner_id = octopusdeploy_library_variable_set.standards.id
   name     = "Standards.ApplicationName.Prefix"

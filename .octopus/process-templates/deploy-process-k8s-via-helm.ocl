@@ -14,12 +14,20 @@ parameter "K8sTemplate.Target.tag" {
     label = "Kubernetes cluster target tag"
 }
 
-parameter "K8sTemplate.Git.Repo" {
+parameter "K8sTemplate.Helm.Package" {
+    display_settings = {
+        Octopus.ControlType = "Package"
+    }
+    help_text = "The GH feed containing the helm chart in a directory"
+    label = "Helm Package"
+}
+
+parameter "K8sTemplate.Helm.ValuesFile" {
     display_settings = {
         Octopus.ControlType = "SingleLineText"
     }
-    help_text = "The git repository where the helm chart is stored"
-    label = "Helm Chart Git Repo"
+    help_text = "The path to the Helm Values File to include in this run"
+    label = "Helm Values File"
 }
 
 parameter "K8sTemplate.Namespace" {
@@ -28,15 +36,6 @@ parameter "K8sTemplate.Namespace" {
     }
     help_text = "The namespace to deploy the helm chart and containers to"
     label = "Kubernetes Namespace"
-}
-
-parameter "K8sTemplate.Helm.AdditionalArguments" {
-    display_settings = {
-        Octopus.ControlType = "MultiLineText"
-    }
-    help_text = "Additional parameters you want to send to helm"
-    is_optional = true
-    label = "Additional Helm Arguments"
 }
 
 parameter "K8sTemplate.Container" {
@@ -84,7 +83,6 @@ step "deploy-application-helm-chart" {
     action {
         action_type = "Octopus.HelmChartUpgrade"
         properties = {
-            Octopus.Action.GitRepository.Source = "External"
             Octopus.Action.Helm.AdditionalArgs = "#{K8sTemplate.Helm.AdditionalArguments}"
             Octopus.Action.Helm.ChartDirectory = "k8s/chart"
             Octopus.Action.Helm.Namespace = "#{K8sTemplate.Namespace}"
@@ -102,19 +100,29 @@ step "deploy-application-helm-chart" {
                       "standard.secrets.connectionString": "#{K8sTemplate.ConnectionString}",
                       "standard.secrets.sumologicUrl": "#{K8sTemplate.SumoLogicUrl}"
                     }
+                  },
+                  {
+                    "Type": "Package",
+                    "PackageId": "",
+                    "PackageName": "ValuesPack-1",
+                    "ValuesFilePaths": "#{K8sTemplate.Helm.ValuesFile}",
+                    "IsDeferred": true,
+                    "PackageParameterName": "K8sTemplate.Helm.Package"
                   }
                 ]
                 EOT
             Octopus.Action.Kubernetes.ResourceStatusCheck = "True"
-            Octopus.Action.Script.ScriptSource = "GitRepository"
+            Octopus.Action.Script.ScriptSource = "Package"
         }
         worker_pool_variable = ""
 
-        git_dependencies {
-            default_branch = "main"
-            git_credential_id = "GitCredentialIds-1"
-            git_credential_type = "Library"
-            repository_uri = "#{K8sTemplate.Git.Repo}"
+        packages {
+            acquisition_location = "Server"
+            properties = {
+                PackageParameterName = "K8sTemplate.Helm.Package"
+                SelectionMode = "deferred"
+                ValuesFilePath = ""
+            }
         }
 
         packages "K8sTemplate.Container" {
@@ -126,6 +134,16 @@ step "deploy-application-helm-chart" {
                 PackageParameterName = "K8sTemplate.Container"
                 Purpose = "DockerImageReference"
                 SelectionMode = "deferred"
+                ValuesFilePath = ""
+            }
+        }
+
+        packages "ValuesPack-1" {
+            acquisition_location = "ExecutionTarget"
+            properties = {
+                Extract = "true"
+                PackageParameterName = "K8sTemplate.Helm.Package"
+                PerformVariableReplace = "False"
                 ValuesFilePath = ""
             }
         }

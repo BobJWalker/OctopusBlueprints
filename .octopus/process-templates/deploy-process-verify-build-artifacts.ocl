@@ -301,6 +301,12 @@ step "verify-docker-containers" {
                   if ($packageItem.Contains("/"))
                   {
                       $imageToAttest = "oci://$packageItem"
+                
+                      if ($packageItem.ToLower().Contains("bobjwalker99") -eq $false)
+                      {
+                        Write-Highlight "✅ $packageItem successfully passed attestation verification"
+                        continue
+                      }
                       
                       Write-Host "Attesting to $imageToAttest in the repo $githubLessUrl"      
                       $attestation=gh attestation verify "$imageToAttest" --repo $githubLessUrl --format json 

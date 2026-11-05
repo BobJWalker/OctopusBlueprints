@@ -83,7 +83,6 @@ step "deploy-application-helm-chart" {
     action {
         action_type = "Octopus.HelmChartUpgrade"
         properties = {
-            Octopus.Action.Helm.AdditionalArgs = "#{K8sTemplate.Helm.AdditionalArguments}"
             Octopus.Action.Helm.ChartDirectory = "k8s/chart"
             Octopus.Action.Helm.Namespace = "#{K8sTemplate.Namespace}"
             Octopus.Action.Helm.ReleaseName = "#{K8sTemplate.Namespace}"
@@ -118,6 +117,8 @@ step "deploy-application-helm-chart" {
 
         packages {
             acquisition_location = "Server"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 PackageParameterName = "K8sTemplate.Helm.Package"
                 SelectionMode = "deferred"
@@ -140,6 +141,8 @@ step "deploy-application-helm-chart" {
 
         packages "ValuesPack-1" {
             acquisition_location = "ExecutionTarget"
+            feed = "octopus-server-built-in"
+            package_id = ""
             properties = {
                 Extract = "true"
                 PackageParameterName = "K8sTemplate.Helm.Package"

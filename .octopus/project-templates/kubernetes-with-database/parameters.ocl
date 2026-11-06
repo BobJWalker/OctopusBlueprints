@@ -1,0 +1,23 @@
+parameter "Template.Environment.Dev" {
+    display_settings = {
+        Octopus.ControlType = "Environments"
+    }
+    help_text = ""
+    label = "Development Environment"
+}
+
+parameter "Template.Environment.Test" {
+    display_settings = {
+        Octopus.ControlType = "Environments"
+    }
+    help_text = ""
+    label = "Test Environment"
+}
+
+parameter "Template.Environment.Production" {
+    display_settings = {
+        Octopus.ControlType = "Environments"
+    }
+    help_text = ""
+    label = "Production Environment"
+}
